@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <Jolt/Math/Vec4.h>
+#include <Jolt/Math/Lane4.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -143,10 +143,10 @@ public:
 	JPH_INLINE UVec4			SplatW() const;
 
 	/// Convert each component from an int to a float
-	JPH_INLINE Vec4				ToFloat() const;
+	JPH_INLINE Lane4			ToFloat() const;
 
-	/// Reinterpret UVec4 as a Vec4 (doesn't change the bits)
-	JPH_INLINE Vec4				ReinterpretAsFloat() const;
+	/// Reinterpret UVec4 as a Lane4 (doesn't change the bits)
+	JPH_INLINE Lane4			ReinterpretAsFloat() const;
 
 	/// Dot product, returns the dot product in X, Y, Z and W components
 	JPH_INLINE UVec4			DotV(UVec4Arg inV2) const;

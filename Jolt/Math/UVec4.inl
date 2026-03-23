@@ -507,31 +507,31 @@ UVec4 UVec4::SplatW() const
 #endif
 }
 
-Vec4 UVec4::ToFloat() const
+Lane4 UVec4::ToFloat() const
 {
 #if defined(JPH_USE_SSE)
 	return _mm_cvtepi32_ps(mValue);
 #elif defined(JPH_USE_NEON)
 	return vcvtq_f32_u32(mValue);
 #elif defined(JPH_USE_RVV)
-	Vec4 res;
+	Lane4 res;
 	const vuint32m1_t v = __riscv_vle32_v_u32m1(mU32, 4);
 	const vfloat32m1_t v_float = __riscv_vfcvt_f_xu_v_f32m1(v, 4);
 	__riscv_vse32_v_f32m1(res.mF32, v_float, 4);
 	return res;
 #else
-	return Vec4((float)mU32[0], (float)mU32[1], (float)mU32[2], (float)mU32[3]);
+	return Lane4((float)mU32[0], (float)mU32[1], (float)mU32[2], (float)mU32[3]);
 #endif
 }
 
-Vec4 UVec4::ReinterpretAsFloat() const
+Lane4 UVec4::ReinterpretAsFloat() const
 {
 #if defined(JPH_USE_SSE)
-	return Vec4(_mm_castsi128_ps(mValue));
+	return Lane4(_mm_castsi128_ps(mValue));
 #elif defined(JPH_USE_NEON)
 	return vreinterpretq_f32_u32(mValue);
 #else
-	return *reinterpret_cast<const Vec4 *>(this);
+	return *reinterpret_cast<const Lane4 *>(this);
 #endif
 }
 

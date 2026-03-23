@@ -8,7 +8,8 @@ JPH_NAMESPACE_BEGIN
 
 class Vec3;
 class DVec3;
-class Vec4;
+class Lane4;
+using Vec4 = Lane4; // Bridge: Vec4 is now Lane4 (SIMD utility)
 class UVec4;
 class BVec16;
 class Quat;
@@ -22,7 +23,8 @@ using Vec3Arg = const Vec3;
 #else
 	using DVec3Arg = const DVec3 &;
 #endif
-using Vec4Arg = const Vec4;
+using Lane4Arg = const Lane4;
+using Vec4Arg = Lane4Arg;
 using UVec4Arg = const UVec4;
 using BVec16Arg = const BVec16;
 using QuatArg = const Quat;
