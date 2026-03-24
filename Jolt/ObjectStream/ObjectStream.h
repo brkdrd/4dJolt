@@ -61,7 +61,7 @@ public:
 	virtual bool				ReadPrimitiveData(Float4 &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(Double3 &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(Vec3 &outPrimitive) = 0;
-	virtual bool				ReadPrimitiveData(DVec3 &outPrimitive) = 0;
+	virtual bool				ReadPrimitiveData(DVec4 &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(Vec4 &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(UVec4 &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(Quat &outPrimitive) = 0;
@@ -97,7 +97,7 @@ public:
 	virtual void				WritePrimitiveData(const Float4 &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const Double3 &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const Vec3 &inPrimitive) = 0;
-	virtual void				WritePrimitiveData(const DVec3 &inPrimitive) = 0;
+	virtual void				WritePrimitiveData(const DVec4 &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const Vec4 &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const UVec4 &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const Quat &inPrimitive) = 0;

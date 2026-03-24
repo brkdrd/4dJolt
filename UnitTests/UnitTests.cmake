@@ -31,7 +31,7 @@ set(UNIT_TESTS_SRC_FILES
 	${UNIT_TESTS_ROOT}/LoggingContactListener.h
 	${UNIT_TESTS_ROOT}/Math/BVec16Tests.cpp
 	${UNIT_TESTS_ROOT}/Math/DMat44Tests.cpp
-	${UNIT_TESTS_ROOT}/Math/DVec3Tests.cpp
+	${UNIT_TESTS_ROOT}/Math/DVec4Tests.cpp
 	${UNIT_TESTS_ROOT}/Math/EigenValueSymmetricTests.cpp
 	${UNIT_TESTS_ROOT}/Math/HalfFloatTests.cpp
 	${UNIT_TESTS_ROOT}/Math/Mat44Tests.cpp

@@ -21,7 +21,7 @@ public:
 	static Plane	sFromPointAndNormal(Vec3Arg inPoint, Vec3Arg inNormal)					{ return Plane(Vec4(inNormal, -inNormal.Dot(inPoint))); }
 
 	/// Create from point and normal, double precision version that more accurately calculates the plane constant
-	static Plane	sFromPointAndNormal(DVec3Arg inPoint, Vec3Arg inNormal)					{ return Plane(Vec4(inNormal, -float(DVec3(inNormal).Dot(inPoint)))); }
+	static Plane	sFromPointAndNormal(DVec4Arg inPoint, Vec3Arg inNormal)					{ return Plane(Vec4(inNormal, -float(DVec4(inNormal).Dot(inPoint)))); }
 
 	/// Create from 3 counter clockwise points
 	static Plane	sFromPointsCCW(Vec3Arg inV1, Vec3Arg inV2, Vec3Arg inV3)				{ return sFromPointAndNormal(inV1, (inV2 - inV1).Cross(inV3 - inV1).Normalized()); }

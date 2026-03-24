@@ -5,7 +5,7 @@
 #pragma once
 
 #include <Jolt/Math/Vec3.h>
-#include <Jolt/Math/Vec4.h>
+#include <Jolt/Math/Lane4.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -25,7 +25,7 @@ JPH_NAMESPACE_BEGIN
 /// w = the real part
 /// v = the imaginary part, (x, y, z)
 ///
-/// Note that we store the quaternion in a Vec4 as [x, y, z, w] because that makes
+/// Note that we store the quaternion in a Lane4 as [x, y, z, w] because that makes
 /// it easy to extract the rotation axis of the quaternion:
 ///
 /// q = [cos(angle / 2), sin(angle / 2) * rotation_axis]
@@ -40,8 +40,8 @@ public:
 								Quat(const Quat &inRHS) = default;
 	Quat &						operator = (const Quat &inRHS) = default;
 	inline						Quat(float inX, float inY, float inZ, float inW)				: mValue(inX, inY, inZ, inW) { }
-	inline explicit				Quat(const Float4 &inV)											: mValue(Vec4::sLoadFloat4(&inV)) { }
-	inline explicit				Quat(Vec4Arg inV)												: mValue(inV) { }
+	inline explicit				Quat(const Float4 &inV)											: mValue(Lane4::sLoadFloat4(&inV)) { }
+	inline explicit				Quat(Lane4Arg inV)												: mValue(inV) { }
 	///@}
 
 	///@name Tests
@@ -81,8 +81,8 @@ public:
 	/// Get the imaginary part of the quaternion
 	JPH_INLINE Vec3				GetXYZ() const													{ return Vec3(mValue); }
 
-	/// Get the quaternion as a Vec4
-	JPH_INLINE Vec4				GetXYZW() const													{ return mValue; }
+	/// Get the quaternion as a Lane4
+	JPH_INLINE Lane4				GetXYZW() const													{ return mValue; }
 
 	/// Set individual components
 	JPH_INLINE void				SetX(float inX)													{ mValue.SetX(inX); }
@@ -98,7 +98,7 @@ public:
 	///@{
 
 	/// @return [0, 0, 0, 0]
-	JPH_INLINE static Quat		sZero()															{ return Quat(Vec4::sZero()); }
+	JPH_INLINE static Quat		sZero()															{ return Quat(Lane4::sZero()); }
 
 	/// @return [1, 0, 0, 0] (or in storage format Quat(0, 0, 0, 1))
 	JPH_INLINE static Quat		sIdentity()														{ return Quat(0, 0, 0, 1); }
@@ -188,7 +188,7 @@ public:
 	JPH_INLINE Quat				Inversed() const												{ return Conjugated() / Length(); }
 
 	/// Ensures that the W component is positive by negating the entire quaternion if it is not. This is useful when you want to store a quaternion as a 3 vector by discarding W and reconstructing it as sqrt(1 - x^2 - y^2 - z^2).
-	JPH_INLINE Quat				EnsureWPositive() const											{ return Quat(Vec4::sXor(mValue, Vec4::sAnd(mValue.SplatW(), UVec4::sReplicate(0x80000000).ReinterpretAsFloat()))); }
+	JPH_INLINE Quat				EnsureWPositive() const											{ return Quat(Lane4::sXor(mValue, Lane4::sAnd(mValue.SplatW(), UVec4::sReplicate(0x80000000).ReinterpretAsFloat()))); }
 
 	/// Get a quaternion that is perpendicular to this quaternion
 	JPH_INLINE Quat				GetPerpendicular() const										{ return Quat(mValue.Swizzle<SWIZZLE_Y, SWIZZLE_X, SWIZZLE_W, SWIZZLE_Z>().FlipSign<1, -1, 1, -1>()); }
@@ -255,13 +255,13 @@ public:
 	JPH_INLINE uint32			CompressUnitQuat() const										{ return mValue.CompressUnitVector(); }
 
 	/// Decompress a unit quaternion from a 32 bit value
-	JPH_INLINE static Quat		sDecompressUnitQuat(uint32 inValue)								{ return Quat(Vec4::sDecompressUnitVector(inValue)); }
+	JPH_INLINE static Quat		sDecompressUnitQuat(uint32 inValue)								{ return Quat(Lane4::sDecompressUnitVector(inValue)); }
 
 	/// To String
 	friend ostream &			operator << (ostream &inStream, QuatArg inQ)					{ inStream << inQ.mValue; return inStream; }
 
 	/// 4 vector that stores [x, y, z, w] parts of the quaternion
-	Vec4						mValue;
+	Lane4						mValue;
 };
 
 static_assert(std::is_trivial<Quat>(), "Is supposed to be a trivial type!");

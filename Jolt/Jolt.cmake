@@ -122,26 +122,30 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Jolt.h
 	${JOLT_PHYSICS_ROOT}/Math/BVec16.h
 	${JOLT_PHYSICS_ROOT}/Math/BVec16.inl
-	${JOLT_PHYSICS_ROOT}/Math/DMat44.h
-	${JOLT_PHYSICS_ROOT}/Math/DMat44.inl
 	${JOLT_PHYSICS_ROOT}/Math/Double3.h
-	${JOLT_PHYSICS_ROOT}/Math/DVec3.h
-	${JOLT_PHYSICS_ROOT}/Math/DVec3.inl
+	${JOLT_PHYSICS_ROOT}/Math/Double4.h
+	${JOLT_PHYSICS_ROOT}/Math/DVec4.h
+	${JOLT_PHYSICS_ROOT}/Math/DVec4.inl
 	${JOLT_PHYSICS_ROOT}/Math/DynMatrix.h
 	${JOLT_PHYSICS_ROOT}/Math/EigenValueSymmetric.h
 	${JOLT_PHYSICS_ROOT}/Math/FindRoot.h
 	${JOLT_PHYSICS_ROOT}/Math/Float2.h
 	${JOLT_PHYSICS_ROOT}/Math/Float3.h
 	${JOLT_PHYSICS_ROOT}/Math/Float4.h
+	${JOLT_PHYSICS_ROOT}/Math/Float8.h
 	${JOLT_PHYSICS_ROOT}/Math/GaussianElimination.h
 	${JOLT_PHYSICS_ROOT}/Math/HalfFloat.h
 	${JOLT_PHYSICS_ROOT}/Math/Mat44.h
 	${JOLT_PHYSICS_ROOT}/Math/Mat44.inl
+	${JOLT_PHYSICS_ROOT}/Math/Lane4.h
+	${JOLT_PHYSICS_ROOT}/Math/Lane4.inl
 	${JOLT_PHYSICS_ROOT}/Math/Math.h
 	${JOLT_PHYSICS_ROOT}/Math/MathTypes.h
 	${JOLT_PHYSICS_ROOT}/Math/Matrix.h
 	${JOLT_PHYSICS_ROOT}/Math/Quat.h
 	${JOLT_PHYSICS_ROOT}/Math/Quat.inl
+	${JOLT_PHYSICS_ROOT}/Math/Rotor.h
+	${JOLT_PHYSICS_ROOT}/Math/Rotor.inl
 	${JOLT_PHYSICS_ROOT}/Math/Real.h
 	${JOLT_PHYSICS_ROOT}/Math/Swizzle.h
 	${JOLT_PHYSICS_ROOT}/Math/Trigonometry.h
@@ -152,6 +156,8 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Math/Vec3.inl
 	${JOLT_PHYSICS_ROOT}/Math/Vec4.h
 	${JOLT_PHYSICS_ROOT}/Math/Vec4.inl
+	${JOLT_PHYSICS_ROOT}/Math/Vec8.h
+	${JOLT_PHYSICS_ROOT}/Math/Vec8.inl
 	${JOLT_PHYSICS_ROOT}/Math/Vector.h
 	${JOLT_PHYSICS_ROOT}/ObjectStream/ObjectStream.h
 	${JOLT_PHYSICS_ROOT}/ObjectStream/SerializableAttribute.h

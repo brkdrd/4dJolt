@@ -8,7 +8,7 @@
 
 JPH_NAMESPACE_BEGIN
 
-/// Class that holds 3 doubles. Used as a storage class. Convert to DVec3 for calculations.
+/// Class that holds 3 doubles. Used as a storage class. Convert to DVec4 for calculations.
 class [[nodiscard]] Double3
 {
 public:

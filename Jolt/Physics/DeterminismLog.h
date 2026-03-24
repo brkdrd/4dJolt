@@ -98,7 +98,7 @@ public:
 		return *this;
 	}
 
-	DeterminismLog &		operator << (DVec3Arg inValue)
+	DeterminismLog &		operator << (DVec4Arg inValue)
 	{
 		mLog << std::hex << std::setw(16) << Convert(inValue.GetX()) << " " << std::setw(16) << Convert(inValue.GetY()) << " " << std::setw(16) << Convert(inValue.GetZ());
 		return *this;

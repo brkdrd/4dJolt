@@ -36,7 +36,7 @@ public:
 		Write(len);
 		if (!IsFailed())
 		{
-			if constexpr (std::is_same_v<T, Vec3> || std::is_same_v<T, DVec3> || std::is_same_v<T, DMat44>)
+			if constexpr (std::is_same_v<T, Vec3> || std::is_same_v<T, DVec4>)
 			{
 				// These types have unused components that we don't want to write
 				for (typename Array<T, A>::size_type i = 0; i < len; ++i)
@@ -77,20 +77,10 @@ public:
 		WriteBytes(&inVec, 3 * sizeof(float));
 	}
 
-	/// Write a DVec3 (don't write W)
-	void				Write(const DVec3 &inVec)
+	/// Write a DVec4 (don't write W)
+	void				Write(const DVec4 &inVec)
 	{
 		WriteBytes(&inVec, 3 * sizeof(double));
-	}
-
-	/// Write a DMat44 (don't write W component of translation)
-	void				Write(const DMat44 &inVec)
-	{
-		Write(inVec.GetColumn4(0));
-		Write(inVec.GetColumn4(1));
-		Write(inVec.GetColumn4(2));
-
-		Write(inVec.GetTranslation());
 	}
 };
 

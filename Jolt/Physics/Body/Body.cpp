@@ -154,7 +154,7 @@ ECanSleep Body::UpdateSleepStateInternal(float inDeltaTime, float inMaxMovement,
 
 #ifdef JPH_DOUBLE_PRECISION
 	// Get base offset for spheres
-	DVec3 offset = mMotionProperties->GetSleepTestOffset();
+	DVec4 offset = mMotionProperties->GetSleepTestOffset();
 #endif // JPH_DOUBLE_PRECISION
 
 	for (int i = 0; i < 3; ++i)

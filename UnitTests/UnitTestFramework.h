@@ -4,7 +4,7 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Core/Atomics.h>
-#include <Jolt/Math/DVec3.h>
+#include <Jolt/Math/DVec4.h>
 #include <Jolt/Math/Float2.h>
 
 // Disable common warnings
@@ -58,7 +58,7 @@ inline void CHECK_APPROX_EQUAL(QuatArg inLHS, QuatArg inRHS, float inTolerance =
 	CHECK(close);
 }
 
-inline void CHECK_APPROX_EQUAL(DVec3Arg inLHS, DVec3Arg inRHS, double inTolerance = 1.0e-6)
+inline void CHECK_APPROX_EQUAL(DVec4Arg inLHS, DVec4Arg inRHS, double inTolerance = 1.0e-6)
 {
 	CHECK(inLHS.IsClose(inRHS, inTolerance * inTolerance));
 }

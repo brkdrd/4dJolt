@@ -5,20 +5,16 @@
 #pragma once
 
 #include <Jolt/Math/Vec3.h>
-#include <Jolt/Math/Vec4.h>
+#include <Jolt/Math/Lane4.h>
 #include <Jolt/Math/Quat.h>
+#include <Jolt/Math/Rotor.h>
 
 JPH_NAMESPACE_BEGIN
 
 #define JPH_EL(r, c) mCol[c].mF32[r]
 
-Mat44::Mat44(Vec4Arg inC1, Vec4Arg inC2, Vec4Arg inC3, Vec4Arg inC4) :
+Mat44::Mat44(Lane4Arg inC1, Lane4Arg inC2, Lane4Arg inC3, Lane4Arg inC4) :
 	mCol { inC1, inC2, inC3, inC4 }
-{
-}
-
-Mat44::Mat44(Vec4Arg inC1, Vec4Arg inC2, Vec4Arg inC3, Vec3Arg inC4) :
-	mCol { inC1, inC2, inC3, Vec4(inC4, 1.0f) }
 {
 }
 
@@ -29,24 +25,24 @@ Mat44::Mat44(Type inC1, Type inC2, Type inC3, Type inC4) :
 
 Mat44 Mat44::sZero()
 {
-	return Mat44(Vec4::sZero(), Vec4::sZero(), Vec4::sZero(), Vec4::sZero());
+	return Mat44(Lane4::sZero(), Lane4::sZero(), Lane4::sZero(), Lane4::sZero());
 }
 
 Mat44 Mat44::sIdentity()
 {
-	return Mat44(Vec4(1, 0, 0, 0), Vec4(0, 1, 0, 0), Vec4(0, 0, 1, 0), Vec4(0, 0, 0, 1));
+	return Mat44(Lane4(1, 0, 0, 0), Lane4(0, 1, 0, 0), Lane4(0, 0, 1, 0), Lane4(0, 0, 0, 1));
 }
 
 Mat44 Mat44::sNaN()
 {
-	return Mat44(Vec4::sNaN(), Vec4::sNaN(), Vec4::sNaN(), Vec4::sNaN());
+	return Mat44(Lane4::sNaN(), Lane4::sNaN(), Lane4::sNaN(), Lane4::sNaN());
 }
 
 Mat44 Mat44::sLoadFloat4x4(const Float4 *inV)
 {
 	Mat44 result;
 	for (int c = 0; c < 4; ++c)
-		result.mCol[c] = Vec4::sLoadFloat4(inV + c);
+		result.mCol[c] = Lane4::sLoadFloat4(inV + c);
 	return result;
 }
 
@@ -54,32 +50,8 @@ Mat44 Mat44::sLoadFloat4x4Aligned(const Float4 *inV)
 {
 	Mat44 result;
 	for (int c = 0; c < 4; ++c)
-		result.mCol[c] = Vec4::sLoadFloat4Aligned(inV + c);
+		result.mCol[c] = Lane4::sLoadFloat4Aligned(inV + c);
 	return result;
-}
-
-Mat44 Mat44::sRotationX(float inX)
-{
-	Vec4 sv, cv;
-	Vec4::sReplicate(inX).SinCos(sv, cv);
-	float s = sv.GetX(), c = cv.GetX();
-	return Mat44(Vec4(1, 0, 0, 0), Vec4(0, c, s, 0), Vec4(0, -s, c, 0), Vec4(0, 0, 0, 1));
-}
-
-Mat44 Mat44::sRotationY(float inY)
-{
-	Vec4 sv, cv;
-	Vec4::sReplicate(inY).SinCos(sv, cv);
-	float s = sv.GetX(), c = cv.GetX();
-	return Mat44(Vec4(c, 0, -s, 0), Vec4(0, 1, 0, 0), Vec4(s, 0, c, 0), Vec4(0, 0, 0, 1));
-}
-
-Mat44 Mat44::sRotationZ(float inZ)
-{
-	Vec4 sv, cv;
-	Vec4::sReplicate(inZ).SinCos(sv, cv);
-	float s = sv.GetX(), c = cv.GetX();
-	return Mat44(Vec4(c, s, 0, 0), Vec4(-s, c, 0, 0), Vec4(0, 0, 1, 0), Vec4(0, 0, 0, 1));
 }
 
 Mat44 Mat44::sRotation(QuatArg inQuat)
@@ -129,104 +101,82 @@ Mat44 Mat44::sRotation(QuatArg inQuat)
 	float yw = ty * w;
 	float zw = tz * w;
 
-	return Mat44(Vec4((1.0f - yy) - zz, xy + zw, xz - yw, 0.0f), // Note: Added extra brackets to force this function to return the same value as the SSE4.1 version across platforms.
-				 Vec4(xy - zw, (1.0f - zz) - xx, yz + xw, 0.0f),
-				 Vec4(xz + yw, yz - xw, (1.0f - xx) - yy, 0.0f),
-				 Vec4(0.0f, 0.0f, 0.0f, 1.0f));
+	return Mat44(Lane4((1.0f - yy) - zz, xy + zw, xz - yw, 0.0f), // Note: Added extra brackets to force this function to return the same value as the SSE4.1 version across platforms.
+				 Lane4(xy - zw, (1.0f - zz) - xx, yz + xw, 0.0f),
+				 Lane4(xz + yw, yz - xw, (1.0f - xx) - yy, 0.0f),
+				 Lane4(0.0f, 0.0f, 0.0f, 1.0f));
 #endif
 }
 
-Mat44 Mat44::sRotation(Vec3Arg inAxis, float inAngle)
+Mat44 Mat44::sRotation(RotorArg inRotor)
 {
-	return sRotation(Quat::sRotation(inAxis, inAngle));
+	// Build 4x4 rotation matrix by applying sandwich product to each basis vector
+	Lane4 c0 = inRotor * Vec4::sAxisX();
+	Lane4 c1 = inRotor * Vec4::sAxisY();
+	Lane4 c2 = inRotor * Vec4::sAxisZ();
+	Lane4 c3 = inRotor * Vec4::sAxisW();
+	return Mat44(c0, c1, c2, c3);
 }
 
-Mat44 Mat44::sTranslation(Vec3Arg inV)
+Mat44 Mat44::sRotationXY(float inAngle)
 {
-	return Mat44(Vec4(1, 0, 0, 0), Vec4(0, 1, 0, 0), Vec4(0, 0, 1, 0), Vec4(inV, 1));
+	float c = cos(inAngle), s = sin(inAngle);
+	return Mat44(Lane4( c, s, 0, 0),
+				 Lane4(-s, c, 0, 0),
+				 Lane4( 0, 0, 1, 0),
+				 Lane4( 0, 0, 0, 1));
 }
 
-Mat44 Mat44::sRotationTranslation(QuatArg inR, Vec3Arg inT)
+Mat44 Mat44::sRotationXZ(float inAngle)
 {
-	Mat44 m = sRotation(inR);
-	m.SetTranslation(inT);
-	return m;
+	float c = cos(inAngle), s = sin(inAngle);
+	return Mat44(Lane4( c, 0, s, 0),
+				 Lane4( 0, 1, 0, 0),
+				 Lane4(-s, 0, c, 0),
+				 Lane4( 0, 0, 0, 1));
 }
 
-Mat44 Mat44::sInverseRotationTranslation(QuatArg inR, Vec3Arg inT)
+Mat44 Mat44::sRotationXW(float inAngle)
 {
-	Mat44 m = sRotation(inR.Conjugated());
-	m.SetTranslation(-m.Multiply3x3(inT));
-	return m;
+	float c = cos(inAngle), s = sin(inAngle);
+	return Mat44(Lane4( c, 0, 0, s),
+				 Lane4( 0, 1, 0, 0),
+				 Lane4( 0, 0, 1, 0),
+				 Lane4(-s, 0, 0, c));
 }
 
-Mat44 Mat44::sScale(float inScale)
+Mat44 Mat44::sRotationYZ(float inAngle)
 {
-	return Mat44(Vec4(inScale, 0, 0, 0), Vec4(0, inScale, 0, 0), Vec4(0, 0, inScale, 0), Vec4(0, 0, 0, 1));
+	float c = cos(inAngle), s = sin(inAngle);
+	return Mat44(Lane4( 1, 0, 0, 0),
+				 Lane4( 0, c, s, 0),
+				 Lane4( 0,-s, c, 0),
+				 Lane4( 0, 0, 0, 1));
 }
 
-Mat44 Mat44::sScale(Vec3Arg inV)
+Mat44 Mat44::sRotationYW(float inAngle)
 {
-	return Mat44(Vec4(inV.GetX(), 0, 0, 0), Vec4(0, inV.GetY(), 0, 0), Vec4(0, 0, inV.GetZ(), 0), Vec4(0, 0, 0, 1));
+	float c = cos(inAngle), s = sin(inAngle);
+	return Mat44(Lane4( 1, 0, 0, 0),
+				 Lane4( 0, c, 0, s),
+				 Lane4( 0, 0, 1, 0),
+				 Lane4( 0,-s, 0, c));
 }
 
-Mat44 Mat44::sOuterProduct(Vec3Arg inV1, Vec3Arg inV2)
+Mat44 Mat44::sRotationZW(float inAngle)
 {
-	Vec4 v1(inV1, 0);
-	return Mat44(v1 * inV2.SplatX(), v1 * inV2.SplatY(), v1 * inV2.SplatZ(), Vec4(0, 0, 0, 1));
-}
-
-Mat44 Mat44::sCrossProduct(Vec3Arg inV)
-{
-#ifdef JPH_USE_SSE4_1
-	// Zero out the W component
-	__m128 zero = _mm_setzero_ps();
-	__m128 v = _mm_blend_ps(inV.mValue, zero, 0b1000);
-
-	// Negate
-	__m128 min_v = _mm_sub_ps(zero, v);
-
-	return Mat44(
-		_mm_shuffle_ps(v, min_v, _MM_SHUFFLE(3, 1, 2, 3)), // [0, z, -y, 0]
-		_mm_shuffle_ps(min_v, v, _MM_SHUFFLE(3, 0, 3, 2)), // [-z, 0, x, 0]
-		_mm_blend_ps(_mm_shuffle_ps(v, v, _MM_SHUFFLE(3, 3, 3, 1)), _mm_shuffle_ps(min_v, min_v, _MM_SHUFFLE(3, 3, 0, 3)), 0b0010), // [y, -x, 0, 0]
-		Vec4(0, 0, 0, 1));
-#else
-	float x = inV.GetX();
-	float y = inV.GetY();
-	float z = inV.GetZ();
-
-	return Mat44(
-		Vec4(0, z, -y, 0),
-		Vec4(-z, 0, x, 0),
-		Vec4(y, -x, 0, 0),
-		Vec4(0, 0, 0, 1));
-#endif
-}
-
-Mat44 Mat44::sLookAt(Vec3Arg inPos, Vec3Arg inTarget, Vec3Arg inUp)
-{
-	Vec3 direction = (inTarget - inPos).NormalizedOr(-Vec3::sAxisZ());
-	Vec3 right = direction.Cross(inUp).NormalizedOr(Vec3::sAxisX());
-	Vec3 up = right.Cross(direction);
-
-	return Mat44(Vec4(right, 0), Vec4(up, 0), Vec4(-direction, 0), Vec4(inPos, 1)).InversedRotationTranslation();
-}
-
-Mat44 Mat44::sPerspective(float inFovY, float inAspect, float inNear, float inFar)
-{
-	float height = 1.0f / Tan(0.5f * inFovY);
-	float width = height / inAspect;
-	float range = inFar / (inNear - inFar);
-
-	return Mat44(Vec4(width, 0.0f, 0.0f, 0.0f), Vec4(0.0f, height, 0.0f, 0.0f), Vec4(0.0f, 0.0f, range, -1.0f), Vec4(0.0f, 0.0f, range * inNear, 0.0f));
+	float c = cos(inAngle), s = sin(inAngle);
+	return Mat44(Lane4( 1, 0, 0, 0),
+				 Lane4( 0, 1, 0, 0),
+				 Lane4( 0, 0, c, s),
+				 Lane4( 0, 0,-s, c));
 }
 
 bool Mat44::operator == (Mat44Arg inM2) const
 {
 	return UVec4::sAnd(
-		UVec4::sAnd(Vec4::sEquals(mCol[0], inM2.mCol[0]), Vec4::sEquals(mCol[1], inM2.mCol[1])),
-		UVec4::sAnd(Vec4::sEquals(mCol[2], inM2.mCol[2]), Vec4::sEquals(mCol[3], inM2.mCol[3]))
+		UVec4::sAnd(Lane4::sEquals(mCol[0], inM2.mCol[0]), Lane4::sEquals(mCol[1], inM2.mCol[1])),
+		UVec4::sAnd(Lane4::sEquals(mCol[2], inM2.mCol[2]), Lane4::sEquals(mCol[3], inM2.mCol[3]))
 	).TestAllTrue();
 }
 
@@ -292,50 +242,7 @@ Mat44 Mat44::operator * (Mat44Arg inM) const
 	return result;
 }
 
-Vec3 Mat44::operator * (Vec3Arg inV) const
-{
-#if defined(JPH_USE_SSE)
-	__m128 t = _mm_mul_ps(mCol[0].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(0, 0, 0, 0)));
-	t = _mm_add_ps(t, _mm_mul_ps(mCol[1].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(1, 1, 1, 1))));
-	t = _mm_add_ps(t, _mm_mul_ps(mCol[2].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(2, 2, 2, 2))));
-	t = _mm_add_ps(t, mCol[3].mValue);
-	return Vec3::sFixW(t);
-#elif defined(JPH_USE_NEON)
-	Type t = vmulq_f32(mCol[0].mValue, vdupq_laneq_f32(inV.mValue, 0));
-	t = vmlaq_f32(t, mCol[1].mValue, vdupq_laneq_f32(inV.mValue, 1));
-	t = vmlaq_f32(t, mCol[2].mValue, vdupq_laneq_f32(inV.mValue, 2));
-	t = vaddq_f32(t, mCol[3].mValue); // Don't combine this with the first mul into a fused multiply add, causes precision issues
-	return Vec3::sFixW(t);
-#elif defined(JPH_USE_RVV)
-	const vfloat32m1_t v0 = __riscv_vfmv_v_f_f32m1(inV.mF32[0], 4);
-	const vfloat32m1_t v1 = __riscv_vfmv_v_f_f32m1(inV.mF32[1], 4);
-	const vfloat32m1_t v2 = __riscv_vfmv_v_f_f32m1(inV.mF32[2], 4);
-
-	const vfloat32m1_t col0 = __riscv_vle32_v_f32m1(mCol[0].mF32, 4);
-	const vfloat32m1_t col1 = __riscv_vle32_v_f32m1(mCol[1].mF32, 4);
-	const vfloat32m1_t col2 = __riscv_vle32_v_f32m1(mCol[2].mF32, 4);
-	const vfloat32m1_t col3 = __riscv_vle32_v_f32m1(mCol[3].mF32, 4);
-
-	const vfloat32m1_t mul1 = __riscv_vfmul_vv_f32m1(col1, v1, 4);
-	const vfloat32m1_t mul2 = __riscv_vfmul_vv_f32m1(col2, v2, 4);
-
-	vfloat32m1_t t = __riscv_vfmul_vv_f32m1(col0, v0, 4);
-	t = __riscv_vfadd_vv_f32m1(t, mul1, 4);
-	t = __riscv_vfadd_vv_f32m1(t, mul2, 4);
-	t = __riscv_vfadd_vv_f32m1(t, col3, 4);
-
-	Type v;
-	__riscv_vse32_v_f32m1(v.mData, t, 4);
-	return Vec3::sFixW(v);
-#else
-	return Vec3(
-		mCol[0].mF32[0] * inV.mF32[0] + mCol[1].mF32[0] * inV.mF32[1] + mCol[2].mF32[0] * inV.mF32[2] + mCol[3].mF32[0],
-		mCol[0].mF32[1] * inV.mF32[0] + mCol[1].mF32[1] * inV.mF32[1] + mCol[2].mF32[1] * inV.mF32[2] + mCol[3].mF32[1],
-		mCol[0].mF32[2] * inV.mF32[0] + mCol[1].mF32[2] * inV.mF32[1] + mCol[2].mF32[2] * inV.mF32[2] + mCol[3].mF32[2]);
-#endif
-}
-
-Vec4 Mat44::operator * (Vec4Arg inV) const
+Lane4 Mat44::operator * (Lane4Arg inV) const
 {
 #if defined(JPH_USE_SSE)
 	__m128 t = _mm_mul_ps(mCol[0].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(0, 0, 0, 0)));
@@ -369,11 +276,11 @@ Vec4 Mat44::operator * (Vec4Arg inV) const
 	t = __riscv_vfadd_vv_f32m1(t, mul2, 4);
 	t = __riscv_vfadd_vv_f32m1(t, mul3, 4);
 
-	Vec4 v;
+	Lane4 v;
 	__riscv_vse32_v_f32m1(v.mF32, t, 4);
 	return v;
 #else
-	return Vec4(
+	return Lane4(
 		mCol[0].mF32[0] * inV.mF32[0] + mCol[1].mF32[0] * inV.mF32[1] + mCol[2].mF32[0] * inV.mF32[2] + mCol[3].mF32[0] * inV.mF32[3],
 		mCol[0].mF32[1] * inV.mF32[0] + mCol[1].mF32[1] * inV.mF32[1] + mCol[2].mF32[1] * inV.mF32[2] + mCol[3].mF32[1] * inV.mF32[3],
 		mCol[0].mF32[2] * inV.mF32[0] + mCol[1].mF32[2] * inV.mF32[1] + mCol[2].mF32[2] * inV.mF32[2] + mCol[3].mF32[2] * inV.mF32[3],
@@ -381,143 +288,9 @@ Vec4 Mat44::operator * (Vec4Arg inV) const
 #endif
 }
 
-Vec3 Mat44::Multiply3x3(Vec3Arg inV) const
-{
-#if defined(JPH_USE_SSE)
-	__m128 t = _mm_mul_ps(mCol[0].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(0, 0, 0, 0)));
-	t = _mm_add_ps(t, _mm_mul_ps(mCol[1].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(1, 1, 1, 1))));
-	t = _mm_add_ps(t, _mm_mul_ps(mCol[2].mValue, _mm_shuffle_ps(inV.mValue, inV.mValue, _MM_SHUFFLE(2, 2, 2, 2))));
-	return Vec3::sFixW(t);
-#elif defined(JPH_USE_NEON)
-	Type t = vmulq_f32(mCol[0].mValue, vdupq_laneq_f32(inV.mValue, 0));
-	t = vmlaq_f32(t, mCol[1].mValue, vdupq_laneq_f32(inV.mValue, 1));
-	t = vmlaq_f32(t, mCol[2].mValue, vdupq_laneq_f32(inV.mValue, 2));
-	return Vec3::sFixW(t);
-#elif defined(JPH_USE_RVV)
-	const vfloat32m1_t v0 = __riscv_vfmv_v_f_f32m1(inV.mF32[0], 4);
-	const vfloat32m1_t v1 = __riscv_vfmv_v_f_f32m1(inV.mF32[1], 4);
-	const vfloat32m1_t v2 = __riscv_vfmv_v_f_f32m1(inV.mF32[2], 4);
-
-	const vfloat32m1_t col0 = __riscv_vle32_v_f32m1(mCol[0].mF32, 4);
-	const vfloat32m1_t col1 = __riscv_vle32_v_f32m1(mCol[1].mF32, 4);
-	const vfloat32m1_t col2 = __riscv_vle32_v_f32m1(mCol[2].mF32, 4);
-
-	const vfloat32m1_t mul1 = __riscv_vfmul_vv_f32m1(v1, col1, 4);
-	const vfloat32m1_t mul2 = __riscv_vfmul_vv_f32m1(v2, col2, 4);
-
-	vfloat32m1_t t = __riscv_vfmul_vv_f32m1(v0, col0, 4);
-	t = __riscv_vfadd_vv_f32m1(t, mul1, 4);
-	t = __riscv_vfadd_vv_f32m1(t, mul2, 4);
-
-	Type v;
-	__riscv_vse32_v_f32m1(v.mData, t, 4);
-	return Vec3::sFixW(v);
-#else
-	return Vec3(
-		mCol[0].mF32[0] * inV.mF32[0] + mCol[1].mF32[0] * inV.mF32[1] + mCol[2].mF32[0] * inV.mF32[2],
-		mCol[0].mF32[1] * inV.mF32[0] + mCol[1].mF32[1] * inV.mF32[1] + mCol[2].mF32[1] * inV.mF32[2],
-		mCol[0].mF32[2] * inV.mF32[0] + mCol[1].mF32[2] * inV.mF32[1] + mCol[2].mF32[2] * inV.mF32[2]);
-#endif
-}
-
-Vec3 Mat44::Multiply3x3Transposed(Vec3Arg inV) const
-{
-#if defined(JPH_USE_SSE4_1)
-	__m128 x = _mm_dp_ps(mCol[0].mValue, inV.mValue, 0x7f);
-	__m128 y = _mm_dp_ps(mCol[1].mValue, inV.mValue, 0x7f);
-	__m128 xy = _mm_blend_ps(x, y, 0b0010);
-	__m128 z = _mm_dp_ps(mCol[2].mValue, inV.mValue, 0x7f);
-	__m128 xyzz = _mm_blend_ps(xy, z, 0b1100);
-	return xyzz;
-#else
-	return Transposed3x3().Multiply3x3(inV);
-#endif
-}
-
-Mat44 Mat44::Multiply3x3(Mat44Arg inM) const
-{
-	JPH_ASSERT(mCol[0][3] == 0.0f);
-	JPH_ASSERT(mCol[1][3] == 0.0f);
-	JPH_ASSERT(mCol[2][3] == 0.0f);
-
-	Mat44 result;
-#if defined(JPH_USE_SSE)
-	for (int i = 0; i < 3; ++i)
-	{
-		__m128 c = inM.mCol[i].mValue;
-		__m128 t = _mm_mul_ps(mCol[0].mValue, _mm_shuffle_ps(c, c, _MM_SHUFFLE(0, 0, 0, 0)));
-		t = _mm_add_ps(t, _mm_mul_ps(mCol[1].mValue, _mm_shuffle_ps(c, c, _MM_SHUFFLE(1, 1, 1, 1))));
-		t = _mm_add_ps(t, _mm_mul_ps(mCol[2].mValue, _mm_shuffle_ps(c, c, _MM_SHUFFLE(2, 2, 2, 2))));
-		result.mCol[i].mValue = t;
-	}
-#elif defined(JPH_USE_NEON)
-	for (int i = 0; i < 3; ++i)
-	{
-		Type c = inM.mCol[i].mValue;
-		Type t = vmulq_f32(mCol[0].mValue, vdupq_laneq_f32(c, 0));
-		t = vmlaq_f32(t, mCol[1].mValue, vdupq_laneq_f32(c, 1));
-		t = vmlaq_f32(t, mCol[2].mValue, vdupq_laneq_f32(c, 2));
-		result.mCol[i].mValue = t;
-	}
-#elif defined(JPH_USE_RVV)
-	for (int i = 0; i < 3; ++i)
-	{
-		const float* col_i = inM.mCol[i].mF32;
-		const vfloat32m1_t v0 = __riscv_vfmv_v_f_f32m1(col_i[0], 4);
-		const vfloat32m1_t v1 = __riscv_vfmv_v_f_f32m1(col_i[1], 4);
-		const vfloat32m1_t v2 = __riscv_vfmv_v_f_f32m1(col_i[2], 4);
-
-		const vfloat32m1_t col0 = __riscv_vle32_v_f32m1(mCol[0].mF32, 4);
-		const vfloat32m1_t col1 = __riscv_vle32_v_f32m1(mCol[1].mF32, 4);
-		const vfloat32m1_t col2 = __riscv_vle32_v_f32m1(mCol[2].mF32, 4);
-
-		const vfloat32m1_t mul1 = __riscv_vfmul_vv_f32m1(v1, col1, 4);
-		const vfloat32m1_t mul2 = __riscv_vfmul_vv_f32m1(v2, col2, 4);
-
-		vfloat32m1_t t = __riscv_vfmul_vv_f32m1(v0, col0, 4);
-		t = __riscv_vfadd_vv_f32m1(t, mul1, 4);
-		t = __riscv_vfadd_vv_f32m1(t, mul2, 4);
-		__riscv_vse32_v_f32m1(result.mCol[i].mF32, t, 4);
-	}
-#else
-	for (int i = 0; i < 3; ++i)
-		result.mCol[i] = mCol[0] * inM.mCol[i].mF32[0] + mCol[1] * inM.mCol[i].mF32[1] + mCol[2] * inM.mCol[i].mF32[2];
-#endif
-	result.mCol[3] = Vec4(0, 0, 0, 1);
-	return result;
-}
-
-Mat44 Mat44::Multiply3x3LeftTransposed(Mat44Arg inM) const
-{
-	// Transpose left hand side
-	Mat44 trans = Transposed3x3();
-
-	// Do 3x3 matrix multiply
-	Mat44 result;
-	result.mCol[0] = trans.mCol[0] * inM.mCol[0].SplatX() + trans.mCol[1] * inM.mCol[0].SplatY() + trans.mCol[2] * inM.mCol[0].SplatZ();
-	result.mCol[1] = trans.mCol[0] * inM.mCol[1].SplatX() + trans.mCol[1] * inM.mCol[1].SplatY() + trans.mCol[2] * inM.mCol[1].SplatZ();
-	result.mCol[2] = trans.mCol[0] * inM.mCol[2].SplatX() + trans.mCol[1] * inM.mCol[2].SplatY() + trans.mCol[2] * inM.mCol[2].SplatZ();
-	result.mCol[3] = Vec4(0, 0, 0, 1);
-	return result;
-}
-
-Mat44 Mat44::Multiply3x3RightTransposed(Mat44Arg inM) const
-{
-	JPH_ASSERT(mCol[0][3] == 0.0f);
-	JPH_ASSERT(mCol[1][3] == 0.0f);
-	JPH_ASSERT(mCol[2][3] == 0.0f);
-
-	Mat44 result;
-	result.mCol[0] = mCol[0] * inM.mCol[0].SplatX() + mCol[1] * inM.mCol[1].SplatX() + mCol[2] * inM.mCol[2].SplatX();
-	result.mCol[1] = mCol[0] * inM.mCol[0].SplatY() + mCol[1] * inM.mCol[1].SplatY() + mCol[2] * inM.mCol[2].SplatY();
-	result.mCol[2] = mCol[0] * inM.mCol[0].SplatZ() + mCol[1] * inM.mCol[1].SplatZ() + mCol[2] * inM.mCol[2].SplatZ();
-	result.mCol[3] = Vec4(0, 0, 0, 1);
-	return result;
-}
-
 Mat44 Mat44::operator * (float inV) const
 {
-	Vec4 multiplier = Vec4::sReplicate(inV);
+	Lane4 multiplier = Lane4::sReplicate(inV);
 
 	Mat44 result;
 	for (int c = 0; c < 4; ++c)
@@ -598,10 +371,10 @@ Mat44 Mat44::Transposed() const
 	result.mCol[3].mValue = tmp4.val[1];
 	return result;
 #elif defined(JPH_USE_RVV)
-	const vfloat32m1_t row0 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[0], sizeof(Vec4), 4);
-	const vfloat32m1_t row1 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[1], sizeof(Vec4), 4);
-	const vfloat32m1_t row2 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[2], sizeof(Vec4), 4);
-	const vfloat32m1_t row3 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[3], sizeof(Vec4), 4);
+	const vfloat32m1_t row0 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[0], sizeof(Lane4), 4);
+	const vfloat32m1_t row1 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[1], sizeof(Lane4), 4);
+	const vfloat32m1_t row2 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[2], sizeof(Lane4), 4);
+	const vfloat32m1_t row3 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[3], sizeof(Lane4), 4);
 
 	Mat44 result;
 	__riscv_vse32_v_f32m1(result.mCol[0].mF32, row0, 4);
@@ -616,58 +389,6 @@ Mat44 Mat44::Transposed() const
 			result.mCol[r].mF32[c] = mCol[c].mF32[r];
 	return result;
 #endif
-}
-
-Mat44 Mat44::Transposed3x3() const
-{
-#if defined(JPH_USE_SSE)
-	__m128 zero = _mm_setzero_ps();
-	__m128 tmp1 = _mm_shuffle_ps(mCol[0].mValue, mCol[1].mValue, _MM_SHUFFLE(1, 0, 1, 0));
-	__m128 tmp3 = _mm_shuffle_ps(mCol[0].mValue, mCol[1].mValue, _MM_SHUFFLE(3, 2, 3, 2));
-	__m128 tmp2 = _mm_shuffle_ps(mCol[2].mValue, zero, _MM_SHUFFLE(1, 0, 1, 0));
-	__m128 tmp4 = _mm_shuffle_ps(mCol[2].mValue, zero, _MM_SHUFFLE(3, 2, 3, 2));
-
-	Mat44 result;
-	result.mCol[0].mValue = _mm_shuffle_ps(tmp1, tmp2, _MM_SHUFFLE(2, 0, 2, 0));
-	result.mCol[1].mValue = _mm_shuffle_ps(tmp1, tmp2, _MM_SHUFFLE(3, 1, 3, 1));
-	result.mCol[2].mValue = _mm_shuffle_ps(tmp3, tmp4, _MM_SHUFFLE(2, 0, 2, 0));
-#elif defined(JPH_USE_NEON)
-	float32x4x2_t tmp1 = vzipq_f32(mCol[0].mValue, mCol[2].mValue);
-	float32x4x2_t tmp2 = vzipq_f32(mCol[1].mValue, vdupq_n_f32(0));
-	float32x4x2_t tmp3 = vzipq_f32(tmp1.val[0], tmp2.val[0]);
-	float32x4x2_t tmp4 = vzipq_f32(tmp1.val[1], tmp2.val[1]);
-
-	Mat44 result;
-	result.mCol[0].mValue = tmp3.val[0];
-	result.mCol[1].mValue = tmp3.val[1];
-	result.mCol[2].mValue = tmp4.val[0];
-#elif defined(JPH_USE_RVV)
-	const float end_col[4] = { 0, 0, 0, 1 };
-	const vfloat32m1_t rvv_end_col = __riscv_vle32_v_f32m1(end_col, 4);
-	const vfloat32m1_t rvv_end_row = __riscv_vfmv_v_f_f32m1(0.0f, 3);
-
-	const vfloat32m1_t row0 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[0], sizeof(Vec4), 3);
-	const vfloat32m1_t row1 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[1], sizeof(Vec4), 3);
-	const vfloat32m1_t row2 = __riscv_vlse32_v_f32m1(&mCol[0].mF32[2], sizeof(Vec4), 3);
-
-	Mat44 result;
-	__riscv_vse32_v_f32m1(result.mCol[0].mF32, row0, 3);
-	__riscv_vse32_v_f32m1(result.mCol[1].mF32, row1, 3);
-	__riscv_vse32_v_f32m1(result.mCol[2].mF32, row2, 3);
-	__riscv_vse32_v_f32m1(result.mCol[3].mF32, rvv_end_col, 4);
-	__riscv_vsse32_v_f32m1(&result.mCol[0].mF32[3], sizeof(Vec4), rvv_end_row, 3);
-	return result;
-#else
-	Mat44 result;
-	for (int c = 0; c < 3; ++c)
-	{
-		for (int r = 0; r < 3; ++r)
-			result.mCol[c].mF32[r] = mCol[r].mF32[c];
-		result.mCol[c].mF32[3] = 0;
-	}
-#endif
-	result.mCol[3] = Vec4(0, 0, 0, 1);
-	return result;
 }
 
 Mat44 Mat44::Inversed() const
@@ -938,10 +659,10 @@ Mat44 Mat44::Inversed() const
 	float m21332331 = m21 * m33 - m23 * m31;
 	float m22332332 = m22 * m33 - m23 * m32;
 
-	Vec4 col0(m11 * m22332332 - m12 * m21332331 + m13 * m21322231,		-m10 * m22332332 + m12 * m20332330 - m13 * m20322230,		m10 * m21332331 - m11 * m20332330 + m13 * m20312130,		-m10 * m21322231 + m11 * m20322230 - m12 * m20312130);
-	Vec4 col1(-m01 * m22332332 + m02 * m21332331 - m03 * m21322231,		m00 * m22332332 - m02 * m20332330 + m03 * m20322230,		-m00 * m21332331 + m01 * m20332330 - m03 * m20312130,		m00 * m21322231 - m01 * m20322230 + m02 * m20312130);
-	Vec4 col2(m01 * m12331332 - m02 * m11331331 + m03 * m11321231,		-m00 * m12331332 + m02 * m10331330 - m03 * m10321230,		m00 * m11331331 - m01 * m10331330 + m03 * m10311130,		-m00 * m11321231 + m01 * m10321230 - m02 * m10311130);
-	Vec4 col3(-m01 * m12231322 + m02 * m11231321 - m03 * m11221221,		m00 * m12231322 - m02 * m10231320 + m03 * m10221220,		-m00 * m11231321 + m01 * m10231320 - m03 * m10211120,		m00 * m11221221 - m01 * m10221220 + m02 * m10211120);
+	Lane4 col0(m11 * m22332332 - m12 * m21332331 + m13 * m21322231,		-m10 * m22332332 + m12 * m20332330 - m13 * m20322230,		m10 * m21332331 - m11 * m20332330 + m13 * m20312130,		-m10 * m21322231 + m11 * m20322230 - m12 * m20312130);
+	Lane4 col1(-m01 * m22332332 + m02 * m21332331 - m03 * m21322231,		m00 * m22332332 - m02 * m20332330 + m03 * m20322230,		-m00 * m21332331 + m01 * m20332330 - m03 * m20312130,		m00 * m21322231 - m01 * m20322230 + m02 * m20312130);
+	Lane4 col2(m01 * m12331332 - m02 * m11331331 + m03 * m11321231,		-m00 * m12331332 + m02 * m10331330 - m03 * m10321230,		m00 * m11331331 - m01 * m10331330 + m03 * m10311130,		-m00 * m11321231 + m01 * m10321230 - m02 * m10311130);
+	Lane4 col3(-m01 * m12231322 + m02 * m11231321 - m03 * m11221221,		m00 * m12231322 - m02 * m10231320 + m03 * m10221220,		-m00 * m11231321 + m01 * m10231320 - m03 * m10211120,		m00 * m11221221 - m01 * m10221220 + m02 * m10211120);
 
 	float det = m00 * col0.mF32[0] + m01 * col0.mF32[1] + m02 * col0.mF32[2] + m03 * col0.mF32[3];
 
@@ -949,236 +670,107 @@ Mat44 Mat44::Inversed() const
 #endif
 }
 
-Mat44 Mat44::InversedRotationTranslation() const
+Rotor Mat44::GetRotor() const
 {
-	Mat44 m = Transposed3x3();
-	m.SetTranslation(-m.Multiply3x3(GetTranslation()));
-	return m;
-}
+	// Extract a 4D rotor from this orthogonal rotation matrix.
+	// Uses quaternion isomorphism Spin(4) ≅ (SU(2)×SU(2))/Z₂:
+	//   rotation acts as v ↦ q_L * v * conj(q_R)
+	// where R⁴ ↔ H via (v1,v2,v3,v4) ↔ v1 + v2*i + v3*j + v4*k.
 
-float Mat44::GetDeterminant3x3() const
-{
-	return GetAxisX().Dot(GetAxisY().Cross(GetAxisZ()));
-}
+	// Step 1: Read columns as quaternions (w,x,y,z) = (row0,row1,row2,row3)
+	float c0w = mCol[0].mF32[0], c0x = mCol[0].mF32[1], c0y = mCol[0].mF32[2], c0z = mCol[0].mF32[3];
+	float c1w = mCol[1].mF32[0], c1x = mCol[1].mF32[1], c1y = mCol[1].mF32[2], c1z = mCol[1].mF32[3];
+	float c2w = mCol[2].mF32[0], c2x = mCol[2].mF32[1], c2y = mCol[2].mF32[2], c2z = mCol[2].mF32[3];
+	float c3w = mCol[3].mF32[0], c3x = mCol[3].mF32[1], c3y = mCol[3].mF32[2], c3z = mCol[3].mF32[3];
 
-Mat44 Mat44::Adjointed3x3() const
-{
-	return Mat44(
-		Vec4(JPH_EL(1, 1), JPH_EL(1, 2), JPH_EL(1, 0), 0) * Vec4(JPH_EL(2, 2), JPH_EL(2, 0), JPH_EL(2, 1), 0)
-			- Vec4(JPH_EL(1, 2), JPH_EL(1, 0), JPH_EL(1, 1), 0) * Vec4(JPH_EL(2, 1), JPH_EL(2, 2), JPH_EL(2, 0), 0),
-		Vec4(JPH_EL(0, 2), JPH_EL(0, 0), JPH_EL(0, 1), 0) * Vec4(JPH_EL(2, 1), JPH_EL(2, 2), JPH_EL(2, 0), 0)
-			- Vec4(JPH_EL(0, 1), JPH_EL(0, 2), JPH_EL(0, 0), 0) * Vec4(JPH_EL(2, 2), JPH_EL(2, 0), JPH_EL(2, 1), 0),
-		Vec4(JPH_EL(0, 1), JPH_EL(0, 2), JPH_EL(0, 0), 0) * Vec4(JPH_EL(1, 2), JPH_EL(1, 0), JPH_EL(1, 1), 0)
-			- Vec4(JPH_EL(0, 2), JPH_EL(0, 0), JPH_EL(0, 1), 0) * Vec4(JPH_EL(1, 1), JPH_EL(1, 2), JPH_EL(1, 0), 0),
-		Vec4(0, 0, 0, 1));
-}
+	// Step 2: conj(C0) * Ck for k=1,2,3 — imaginary parts form q_R's 3x3 rotation matrix
+	float p1x = c0w*c1x - c0x*c1w - c0y*c1z + c0z*c1y;
+	float p1y = c0w*c1y + c0x*c1z - c0y*c1w - c0z*c1x;
+	float p1z = c0w*c1z - c0x*c1y + c0y*c1x - c0z*c1w;
 
-Mat44 Mat44::Inversed3x3() const
-{
-	float det = GetDeterminant3x3();
+	float p2x = c0w*c2x - c0x*c2w - c0y*c2z + c0z*c2y;
+	float p2y = c0w*c2y + c0x*c2z - c0y*c2w - c0z*c2x;
+	float p2z = c0w*c2z - c0x*c2y + c0y*c2x - c0z*c2w;
 
-	return Mat44(
-		(Vec4(JPH_EL(1, 1), JPH_EL(1, 2), JPH_EL(1, 0), 0) * Vec4(JPH_EL(2, 2), JPH_EL(2, 0), JPH_EL(2, 1), 0)
-			- Vec4(JPH_EL(1, 2), JPH_EL(1, 0), JPH_EL(1, 1), 0) * Vec4(JPH_EL(2, 1), JPH_EL(2, 2), JPH_EL(2, 0), 0)) / det,
-		(Vec4(JPH_EL(0, 2), JPH_EL(0, 0), JPH_EL(0, 1), 0) * Vec4(JPH_EL(2, 1), JPH_EL(2, 2), JPH_EL(2, 0), 0)
-			- Vec4(JPH_EL(0, 1), JPH_EL(0, 2), JPH_EL(0, 0), 0) * Vec4(JPH_EL(2, 2), JPH_EL(2, 0), JPH_EL(2, 1), 0)) / det,
-		(Vec4(JPH_EL(0, 1), JPH_EL(0, 2), JPH_EL(0, 0), 0) * Vec4(JPH_EL(1, 2), JPH_EL(1, 0), JPH_EL(1, 1), 0)
-			- Vec4(JPH_EL(0, 2), JPH_EL(0, 0), JPH_EL(0, 1), 0) * Vec4(JPH_EL(1, 1), JPH_EL(1, 2), JPH_EL(1, 0), 0)) / det,
-		Vec4(0, 0, 0, 1));
-}
+	float p3x = c0w*c3x - c0x*c3w - c0y*c3z + c0z*c3y;
+	float p3y = c0w*c3y + c0x*c3z - c0y*c3w - c0z*c3x;
+	float p3z = c0w*c3z - c0x*c3y + c0y*c3x - c0z*c3w;
 
-bool Mat44::SetInversed3x3(Mat44Arg inM)
-{
-	float det = inM.GetDeterminant3x3();
-
-	// If the determinant is zero the matrix is singular and we return false
-	if (det == 0.0f)
-		return false;
-
-	// Finish calculating the inverse
-	*this = inM.Adjointed3x3();
-	mCol[0] /= det;
-	mCol[1] /= det;
-	mCol[2] /= det;
-	return true;
-}
-
-Quat Mat44::GetQuaternion() const
-{
-	float tr = mCol[0].mF32[0] + mCol[1].mF32[1] + mCol[2].mF32[2];
+	// Step 3: Extract q_R from R_3x3 using Shepperd's method
+	// R_3x3[row][col]: col0=(p1x,p1y,p1z), col1=(p2x,p2y,p2z), col2=(p3x,p3y,p3z)
+	float tr = p1x + p2y + p3z;
+	float qrw, qrx, qry, qrz;
 
 	if (tr >= 0.0f)
 	{
 		float s = sqrt(tr + 1.0f);
 		float is = 0.5f / s;
-		return Quat(
-			(mCol[1].mF32[2] - mCol[2].mF32[1]) * is,
-			(mCol[2].mF32[0] - mCol[0].mF32[2]) * is,
-			(mCol[0].mF32[1] - mCol[1].mF32[0]) * is,
-			0.5f * s);
+		qrw = 0.5f * s;
+		qrx = (p2z - p3y) * is;
+		qry = (p3x - p1z) * is;
+		qrz = (p1y - p2x) * is;
 	}
 	else
 	{
 		int i = 0;
-		if (mCol[1].mF32[1] > mCol[0].mF32[0]) i = 1;
-		if (mCol[2].mF32[2] > mCol[i].mF32[i]) i = 2;
+		if (p2y > p1x) i = 1;
+		if (p3z > (i == 0 ? p1x : p2y)) i = 2;
 
 		if (i == 0)
 		{
-			float s = sqrt(mCol[0].mF32[0] - (mCol[1].mF32[1] + mCol[2].mF32[2]) + 1);
+			float s = sqrt(p1x - p2y - p3z + 1.0f);
 			float is = 0.5f / s;
-			return Quat(
-				0.5f * s,
-				(mCol[1].mF32[0] + mCol[0].mF32[1]) * is,
-				(mCol[0].mF32[2] + mCol[2].mF32[0]) * is,
-				(mCol[1].mF32[2] - mCol[2].mF32[1]) * is);
+			qrx = 0.5f * s;
+			qry = (p2x + p1y) * is;
+			qrz = (p1z + p3x) * is;
+			qrw = (p2z - p3y) * is;
 		}
 		else if (i == 1)
 		{
-			float s = sqrt(mCol[1].mF32[1] - (mCol[2].mF32[2] + mCol[0].mF32[0]) + 1);
+			float s = sqrt(p2y - p3z - p1x + 1.0f);
 			float is = 0.5f / s;
-			return Quat(
-				(mCol[1].mF32[0] + mCol[0].mF32[1]) * is,
-				0.5f * s,
-				(mCol[2].mF32[1] + mCol[1].mF32[2]) * is,
-				(mCol[2].mF32[0] - mCol[0].mF32[2]) * is);
+			qrx = (p2x + p1y) * is;
+			qry = 0.5f * s;
+			qrz = (p3y + p2z) * is;
+			qrw = (p3x - p1z) * is;
 		}
 		else
 		{
 			JPH_ASSERT(i == 2);
 
-			float s = sqrt(mCol[2].mF32[2] - (mCol[0].mF32[0] + mCol[1].mF32[1]) + 1);
+			float s = sqrt(p3z - p1x - p2y + 1.0f);
 			float is = 0.5f / s;
-			return Quat(
-				(mCol[0].mF32[2] + mCol[2].mF32[0]) * is,
-				(mCol[2].mF32[1] + mCol[1].mF32[2]) * is,
-				0.5f * s,
-				(mCol[0].mF32[1] - mCol[1].mF32[0]) * is);
+			qrx = (p1z + p3x) * is;
+			qry = (p3y + p2z) * is;
+			qrz = 0.5f * s;
+			qrw = (p1y - p2x) * is;
 		}
 	}
-}
 
-Mat44 Mat44::sQuatLeftMultiply(QuatArg inQ)
-{
-	return Mat44(
-		inQ.mValue.Swizzle<SWIZZLE_W, SWIZZLE_Z, SWIZZLE_Y, SWIZZLE_X>().FlipSign<1, 1, -1, -1>(),
-		inQ.mValue.Swizzle<SWIZZLE_Z, SWIZZLE_W, SWIZZLE_X, SWIZZLE_Y>().FlipSign<-1, 1, 1, -1>(),
-		inQ.mValue.Swizzle<SWIZZLE_Y, SWIZZLE_X, SWIZZLE_W, SWIZZLE_Z>().FlipSign<1, -1, 1, -1>(),
-		inQ.mValue);
-}
+	// Step 4: q_L = C0 * q_R (quaternion multiply)
+	float qlw = c0w*qrw - c0x*qrx - c0y*qry - c0z*qrz;
+	float qlx = c0w*qrx + c0x*qrw + c0y*qrz - c0z*qry;
+	float qly = c0w*qry - c0x*qrz + c0y*qrw + c0z*qrx;
+	float qlz = c0w*qrz + c0x*qry - c0y*qrx + c0z*qrw;
 
-Mat44 Mat44::sQuatRightMultiply(QuatArg inQ)
-{
-	return Mat44(
-		inQ.mValue.Swizzle<SWIZZLE_W, SWIZZLE_Z, SWIZZLE_Y, SWIZZLE_X>().FlipSign<1, -1, 1, -1>(),
-		inQ.mValue.Swizzle<SWIZZLE_Z, SWIZZLE_W, SWIZZLE_X, SWIZZLE_Y>().FlipSign<1, 1, -1, -1>(),
-		inQ.mValue.Swizzle<SWIZZLE_Y, SWIZZLE_X, SWIZZLE_W, SWIZZLE_Z>().FlipSign<-1, 1, 1, -1>(),
-		inQ.mValue);
-}
-
-Mat44 Mat44::GetRotation() const
-{
-	JPH_ASSERT(mCol[0][3] == 0.0f);
-	JPH_ASSERT(mCol[1][3] == 0.0f);
-	JPH_ASSERT(mCol[2][3] == 0.0f);
-
-	return Mat44(mCol[0], mCol[1], mCol[2], Vec4(0, 0, 0, 1));
-}
-
-Mat44 Mat44::GetRotationSafe() const
-{
-#if defined(JPH_USE_AVX512)
-	return Mat44(_mm_maskz_mov_ps(0b0111, mCol[0].mValue),
-				 _mm_maskz_mov_ps(0b0111, mCol[1].mValue),
-				 _mm_maskz_mov_ps(0b0111, mCol[2].mValue),
-				 Vec4(0, 0, 0, 1));
-#elif defined(JPH_USE_SSE4_1)
-	__m128 zero = _mm_setzero_ps();
-	return Mat44(_mm_blend_ps(mCol[0].mValue, zero, 8),
-				 _mm_blend_ps(mCol[1].mValue, zero, 8),
-				 _mm_blend_ps(mCol[2].mValue, zero, 8),
-				 Vec4(0, 0, 0, 1));
-#elif defined(JPH_USE_NEON)
-	return Mat44(vsetq_lane_f32(0, mCol[0].mValue, 3),
-				 vsetq_lane_f32(0, mCol[1].mValue, 3),
-				 vsetq_lane_f32(0, mCol[2].mValue, 3),
-				 Vec4(0, 0, 0, 1));
-#elif defined(JPH_USE_RVV)
-	const float end_col[4] = { 0, 0, 0, 1 };
-	const vfloat32m1_t rvv_end_col = __riscv_vle32_v_f32m1(end_col, 4);
-	const vfloat32m1_t rvv_end_row = __riscv_vfmv_v_f_f32m1(0.0f, 3);
-
-	Mat44 result(*this);
-	__riscv_vse32_v_f32m1(result.mCol[3].mF32, rvv_end_col, 4);
-	__riscv_vsse32_v_f32m1(&result.mCol[0].mF32[3], sizeof(Vec4), rvv_end_row, 3);
-	return result;
-#else
-	return Mat44(Vec4(mCol[0].mF32[0], mCol[0].mF32[1], mCol[0].mF32[2], 0),
-				 Vec4(mCol[1].mF32[0], mCol[1].mF32[1], mCol[1].mF32[2], 0),
-				 Vec4(mCol[2].mF32[0], mCol[2].mF32[1], mCol[2].mF32[2], 0),
-				 Vec4(0, 0, 0, 1));
-#endif
-}
-
-void Mat44::SetRotation(Mat44Arg inRotation)
-{
-	mCol[0] = inRotation.mCol[0];
-	mCol[1] = inRotation.mCol[1];
-	mCol[2] = inRotation.mCol[2];
-}
-
-Mat44 Mat44::PreTranslated(Vec3Arg inTranslation) const
-{
-	return Mat44(mCol[0], mCol[1], mCol[2], Vec4(GetTranslation() + Multiply3x3(inTranslation), 1));
-}
-
-Mat44 Mat44::PostTranslated(Vec3Arg inTranslation) const
-{
-	return Mat44(mCol[0], mCol[1], mCol[2], Vec4(GetTranslation() + inTranslation, 1));
-}
-
-Mat44 Mat44::PreScaled(Vec3Arg inScale) const
-{
-	return Mat44(inScale.GetX() * mCol[0], inScale.GetY() * mCol[1], inScale.GetZ() * mCol[2], mCol[3]);
-}
-
-Mat44 Mat44::PostScaled(Vec3Arg inScale) const
-{
-	Vec4 scale(inScale, 1);
-	return Mat44(scale * mCol[0], scale * mCol[1], scale * mCol[2], scale * mCol[3]);
-}
-
-Mat44 Mat44::Decompose(Vec3 &outScale) const
-{
-	// Start the modified Gram-Schmidt algorithm
-	// X axis will just be normalized
-	Vec3 x = GetAxisX();
-
-	// Make Y axis perpendicular to X
-	Vec3 y = GetAxisY();
-	float x_dot_x = x.LengthSq();
-	y -= (x.Dot(y) / x_dot_x) * x;
-
-	// Make Z axis perpendicular to X
-	Vec3 z = GetAxisZ();
-	z -= (x.Dot(z) / x_dot_x) * x;
-
-	// Make Z axis perpendicular to Y
-	float y_dot_y = y.LengthSq();
-	z -= (y.Dot(z) / y_dot_y) * y;
-
-	// Determine the scale
-	float z_dot_z = z.LengthSq();
-	outScale = Vec3(x_dot_x, y_dot_y, z_dot_z).Sqrt();
-
-	// If the resulting x, y and z vectors don't form a right handed matrix, flip the z axis.
-	if (x.Cross(y).Dot(z) < 0.0f)
-		outScale.SetZ(-outScale.GetZ());
-
-	// Determine the rotation and translation
-	return Mat44(Vec4(x / outScale.GetX(), 0), Vec4(y / outScale.GetY(), 0), Vec4(z / outScale.GetZ(), 0), GetColumn4(3));
+	// Step 5: Convert (q_L, q_R) pair to rotor components [s, e12, e13, e14, e23, e24, e34, e1234]
+	return Rotor(
+		(qlw + qrw) * 0.5f,			// s
+		(qrx - qlx) * 0.5f,			// e12
+		(qry - qly) * 0.5f,			// e13
+		(qrz - qlz) * 0.5f,			// e14
+		(qrz + qlz) * 0.5f,			// e23
+		-(qry + qly) * 0.5f,			// e24
+		(qrx + qlx) * 0.5f,			// e34
+		(qlw - qrw) * 0.5f				// e1234
+	).Normalized();
 }
 
 #undef JPH_EL
+
+Mat44 Rotor::ToRotationMatrix() const
+{
+	return Mat44::sRotation(*this);
+}
 
 JPH_NAMESPACE_END

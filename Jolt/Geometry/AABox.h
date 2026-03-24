@@ -20,7 +20,7 @@ public:
 	/// Constructor
 					AABox()												: mMin(Vec3::sReplicate(FLT_MAX)), mMax(Vec3::sReplicate(-FLT_MAX)) { }
 					AABox(Vec3Arg inMin, Vec3Arg inMax)					: mMin(inMin), mMax(inMax) { }
-					AABox(DVec3Arg inMin, DVec3Arg inMax)				: mMin(inMin.ToVec3RoundDown()), mMax(inMax.ToVec3RoundUp()) { }
+					AABox(DVec4Arg inMin, DVec4Arg inMax)				: mMin(inMin.ToVec3RoundDown()), mMax(inMax.ToVec3RoundUp()) { }
 					AABox(Vec3Arg inCenter, float inRadius)				: mMin(inCenter - Vec3::sReplicate(inRadius)), mMax(inCenter + Vec3::sReplicate(inRadius)) { }
 
 	/// Create box from 2 points
@@ -155,7 +155,7 @@ public:
 	}
 
 	/// Check if this box contains a point
-	bool			Contains(DVec3Arg inOther) const
+	bool			Contains(DVec4Arg inOther) const
 	{
 		return Contains(Vec3(inOther));
 	}
@@ -183,10 +183,10 @@ public:
 	}
 
 	/// Translate bounding box
-	void			Translate(DVec3Arg inTranslation)
+	void			Translate(DVec4Arg inTranslation)
 	{
-		mMin = (DVec3(mMin) + inTranslation).ToVec3RoundDown();
-		mMax = (DVec3(mMax) + inTranslation).ToVec3RoundUp();
+		mMin = (DVec4(mMin) + inTranslation).ToVec3RoundDown();
+		mMax = (DVec4(mMax) + inTranslation).ToVec3RoundUp();
 	}
 
 	/// Transform bounding box

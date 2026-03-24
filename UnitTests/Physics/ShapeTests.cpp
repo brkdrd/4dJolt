@@ -767,7 +767,7 @@ TEST_SUITE("ShapeTests")
 		CHECK(bounds2 == AABox(vec3_pos, vec3_pos));
 
 		// Check that get world space bounds returns a single point for double precision parameters
-		AABox bounds3 = mutable_compound->GetWorldSpaceBounds(DMat44::sRotationTranslation(rotation, DVec3(vec3_pos)), Vec3(1, 2, 3));
+		AABox bounds3 = mutable_compound->GetWorldSpaceBounds(DMat44::sRotationTranslation(rotation, DVec4(vec3_pos)), Vec3(1, 2, 3));
 		CHECK(bounds3 == AABox(vec3_pos, vec3_pos));
 
 		// Add a shape

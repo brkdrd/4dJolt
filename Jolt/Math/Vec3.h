@@ -24,7 +24,7 @@ public:
 #elif defined(JPH_USE_NEON)
 	using Type = float32x4_t;
 #else
-	using Type = Vec4::Type;
+	using Type = Lane4::Type;
 #endif
 
 	// Argument type
@@ -34,7 +34,7 @@ public:
 								Vec3() = default; ///< Intentionally not initialized for performance reasons
 								Vec3(const Vec3 &inRHS) = default;
 	Vec3 &						operator = (const Vec3 &inRHS) = default;
-	explicit JPH_INLINE			Vec3(Vec4Arg inRHS);
+	explicit JPH_INLINE			Vec3(Lane4Arg inRHS);
 	JPH_INLINE					Vec3(Type inRHS) : mValue(inRHS)				{ CheckW(); }
 
 	/// Load 3 floats from memory
@@ -203,13 +203,13 @@ public:
 	JPH_INLINE Vec3				Swizzle() const;
 
 	/// Replicate the X component to all components
-	JPH_INLINE Vec4				SplatX() const;
+	JPH_INLINE Lane4				SplatX() const;
 
 	/// Replicate the Y component to all components
-	JPH_INLINE Vec4				SplatY() const;
+	JPH_INLINE Lane4				SplatY() const;
 
 	/// Replicate the Z component to all components
-	JPH_INLINE Vec4				SplatZ() const;
+	JPH_INLINE Lane4				SplatZ() const;
 
 	/// Get index of component with lowest value
 	JPH_INLINE int				GetLowestComponentIndex() const;
@@ -230,7 +230,7 @@ public:
 	JPH_INLINE Vec3				DotV(Vec3Arg inV2) const;
 
 	/// Dot product, returns the dot product in X, Y, Z and W components
-	JPH_INLINE Vec4				DotV4(Vec3Arg inV2) const;
+	JPH_INLINE Lane4				DotV4(Vec3Arg inV2) const;
 
 	/// Dot product
 	JPH_INLINE float			Dot(Vec3Arg inV2) const;

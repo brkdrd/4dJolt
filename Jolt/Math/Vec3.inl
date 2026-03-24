@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2021 Jorrit Rouwe
 // SPDX-License-Identifier: MIT
 
-#include <Jolt/Math/Vec4.h>
+#include <Jolt/Math/Lane4.h>
 #include <Jolt/Math/UVec4.h>
 #include <Jolt/Core/HashCombine.h>
 
@@ -49,7 +49,7 @@ JPH_INLINE Vec3::Type Vec3::sFixW(Type inValue)
 #endif // JPH_FLOATING_POINT_EXCEPTIONS_ENABLED
 }
 
-Vec3::Vec3(Vec4Arg inRHS) :
+Vec3::Vec3(Lane4Arg inRHS) :
 	mValue(sFixW(inRHS.mValue))
 {
 }
@@ -466,8 +466,8 @@ Vec3 Vec3::sAnd(Vec3Arg inV1, Vec3Arg inV2)
 
 Vec3 Vec3::sUnitSpherical(float inTheta, float inPhi)
 {
-	Vec4 s, c;
-	Vec4(inTheta, inPhi, 0, 0).SinCos(s, c);
+	Lane4 s, c;
+	Lane4(inTheta, inPhi, 0, 0).SinCos(s, c);
 	return Vec3(s.GetX() * c.GetY(), s.GetX() * s.GetY(), c.GetX());
 }
 
@@ -756,51 +756,51 @@ Vec3 Vec3::operator / (Vec3Arg inV2) const
 #endif
 }
 
-Vec4 Vec3::SplatX() const
+Lane4 Vec3::SplatX() const
 {
 #if defined(JPH_USE_SSE)
 	return _mm_shuffle_ps(mValue, mValue, _MM_SHUFFLE(0, 0, 0, 0));
 #elif defined(JPH_USE_NEON)
 	return vdupq_laneq_f32(mValue, 0);
 #elif defined(JPH_USE_RVV)
-	Vec4 vec;
+	Lane4 vec;
 	const vfloat32m1_t splat = __riscv_vfmv_v_f_f32m1(mF32[0], 4);
 	__riscv_vse32_v_f32m1(vec.mF32, splat, 4);
 	return vec;
 #else
-	return Vec4(mF32[0], mF32[0], mF32[0], mF32[0]);
+	return Lane4(mF32[0], mF32[0], mF32[0], mF32[0]);
 #endif
 }
 
-Vec4 Vec3::SplatY() const
+Lane4 Vec3::SplatY() const
 {
 #if defined(JPH_USE_SSE)
 	return _mm_shuffle_ps(mValue, mValue, _MM_SHUFFLE(1, 1, 1, 1));
 #elif defined(JPH_USE_NEON)
 	return vdupq_laneq_f32(mValue, 1);
 #elif defined(JPH_USE_RVV)
-	Vec4 vec;
+	Lane4 vec;
 	const vfloat32m1_t splat = __riscv_vfmv_v_f_f32m1(mF32[1], 4);
 	__riscv_vse32_v_f32m1(vec.mF32, splat, 4);
 	return vec;
 #else
-	return Vec4(mF32[1], mF32[1], mF32[1], mF32[1]);
+	return Lane4(mF32[1], mF32[1], mF32[1], mF32[1]);
 #endif
 }
 
-Vec4 Vec3::SplatZ() const
+Lane4 Vec3::SplatZ() const
 {
 #if defined(JPH_USE_SSE)
 	return _mm_shuffle_ps(mValue, mValue, _MM_SHUFFLE(2, 2, 2, 2));
 #elif defined(JPH_USE_NEON)
 	return vdupq_laneq_f32(mValue, 2);
 #elif defined(JPH_USE_RVV)
-	Vec4 vec;
+	Lane4 vec;
 	const vfloat32m1_t splat = __riscv_vfmv_v_f_f32m1(mF32[2], 4);
 	__riscv_vse32_v_f32m1(vec.mF32, splat, 4);
 	return vec;
 #else
-	return Vec4(mF32[2], mF32[2], mF32[2], mF32[2]);
+	return Lane4(mF32[2], mF32[2], mF32[2], mF32[2]);
 #endif
 }
 
@@ -908,7 +908,7 @@ Vec3 Vec3::DotV(Vec3Arg inV2) const
 #endif
 }
 
-Vec4 Vec3::DotV4(Vec3Arg inV2) const
+Lane4 Vec3::DotV4(Vec3Arg inV2) const
 {
 #if defined(JPH_USE_SSE4_1)
 	__m128 mul = _mm_mul_ps(mValue, inV2.mValue);
@@ -923,7 +923,7 @@ Vec4 Vec3::DotV4(Vec3Arg inV2) const
 	mul = vsetq_lane_f32(0, mul, 3);
 	return vdupq_n_f32(vaddvq_f32(mul));
 #elif defined(JPH_USE_RVV)
-	Vec4 res;
+	Lane4 res;
 	const vfloat32m1_t zeros = __riscv_vfmv_v_f_f32m1(0.0f, 3);
 	const vfloat32m1_t v1 = __riscv_vle32_v_f32m1(mF32, 3);
 	const vfloat32m1_t v2 = __riscv_vle32_v_f32m1(inV2.mF32, 3);
@@ -936,7 +936,7 @@ Vec4 Vec3::DotV4(Vec3Arg inV2) const
 	float dot = 0.0f;
 	for (int i = 0; i < 3; i++)
 		dot += mF32[i] * inV2.mF32[i];
-	return Vec4::sReplicate(dot);
+	return Lane4::sReplicate(dot);
 #endif
 }
 

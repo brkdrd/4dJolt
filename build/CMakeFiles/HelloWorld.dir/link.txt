@@ -1,0 +1,1 @@
+/usr/bin/g++  -Wall -Werror -g -fno-rtti -fno-exceptions -Wno-stringop-overflow -Wno-psabi -ffp-contract=off -pthread CMakeFiles/HelloWorld.dir/home/brkdrd/4dJolt/HelloWorld/HelloWorld.cpp.o -o HelloWorld  libJolt.a 

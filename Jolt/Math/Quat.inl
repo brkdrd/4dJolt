@@ -42,7 +42,7 @@ Quat Quat::operator * (QuatArg inRHS) const
 #endif
 
 	// [(aw+bz)+(dx-cy),(bw+cx)+(dy-az),(cw+ay)+(dz-bx),-(ax+by)+(dw-cz)]
-	return Quat(Vec4(m7));
+	return Quat(Lane4(m7));
 #else
 	float a = mValue.GetX();
 	float b = mValue.GetY();
@@ -90,7 +90,7 @@ Quat Quat::sMultiplyImaginary(Vec3Arg inLHS, QuatArg inRHS)
 	__m128 m4 = _mm_mul_ps(cabc, yzxz);
 
 	// [(aw+bz)-cy,(bw+cx)-az,(cw+ay)-bx,-(ax+by)-cz]
-	return Quat(Vec4(_mm_sub_ps(m3, m4)));
+	return Quat(Lane4(_mm_sub_ps(m3, m4)));
 #else
 	float a = inLHS.GetX();
 	float b = inLHS.GetY();
@@ -112,9 +112,9 @@ Quat Quat::sRotation(Vec3Arg inAxis, float inAngle)
 {
 	// returns [inAxis * sin(0.5f * inAngle), cos(0.5f * inAngle)]
 	JPH_ASSERT(inAxis.IsNormalized());
-	Vec4 s, c;
-	Vec4::sReplicate(0.5f * inAngle).SinCos(s, c);
-	return Quat(Vec4::sSelect(Vec4(inAxis) * s, c, UVec4(0, 0, 0, 0xffffffffU)));
+	Lane4 s, c;
+	Lane4::sReplicate(0.5f * inAngle).SinCos(s, c);
+	return Quat(Lane4::sSelect(Lane4(inAxis) * s, c, UVec4(0, 0, 0, 0xffffffffU)));
 }
 
 void Quat::GetAxisAngle(Vec3 &outAxis, float &outAngle) const
@@ -199,12 +199,12 @@ Quat Quat::sFromTo(Vec3Arg inFrom, Vec3Arg inTo)
 		else
 		{
 			// If vectors are perpendicular, take one of the many 180 degree rotations that exist
-			return Quat(Vec4(inFrom.GetNormalizedPerpendicular(), 0));
+			return Quat(Lane4(inFrom.GetNormalizedPerpendicular(), 0));
 		}
 	}
 
 	Vec3 v = inFrom.Cross(inTo);
-	return Quat(Vec4(v, w)).Normalized();
+	return Quat(Lane4(v, w)).Normalized();
 }
 
 template <class Random>
@@ -214,15 +214,15 @@ Quat Quat::sRandom(Random &inRandom)
 	float x0 = zero_to_one(inRandom);
 	float r1 = sqrt(1.0f - x0), r2 = sqrt(x0);
 	std::uniform_real_distribution<float> zero_to_two_pi(0.0f, 2.0f * JPH_PI);
-	Vec4 s, c;
-	Vec4(zero_to_two_pi(inRandom), zero_to_two_pi(inRandom), 0, 0).SinCos(s, c);
+	Lane4 s, c;
+	Lane4(zero_to_two_pi(inRandom), zero_to_two_pi(inRandom), 0, 0).SinCos(s, c);
 	return Quat(s.GetX() * r1, c.GetX() * r1, s.GetY() * r2, c.GetY() * r2);
 }
 
 Quat Quat::sEulerAngles(Vec3Arg inAngles)
 {
-	Vec4 half(0.5f * inAngles);
-	Vec4 s, c;
+	Lane4 half(0.5f * inAngles);
+	Lane4 s, c;
 	half.SinCos(s, c);
 
 	float cx = c.GetX();
@@ -261,7 +261,7 @@ Vec3 Quat::GetEulerAngles() const
 
 Quat Quat::GetTwist(Vec3Arg inAxis) const
 {
-	Quat twist(Vec4(GetXYZ().Dot(inAxis) * inAxis, GetW()));
+	Quat twist(Lane4(GetXYZ().Dot(inAxis) * inAxis, GetW()));
 	float twist_len = twist.LengthSq();
 	if (twist_len != 0.0f)
 		return twist / sqrt(twist_len);
@@ -289,7 +289,7 @@ void Quat::GetSwingTwist(Quat &outSwing, Quat &outTwist) const
 Quat Quat::LERP(QuatArg inDestination, float inFraction) const
 {
 	float scale0 = 1.0f - inFraction;
-	return Quat(Vec4::sReplicate(scale0) * mValue + Vec4::sReplicate(inFraction) * inDestination.mValue);
+	return Quat(Lane4::sReplicate(scale0) * mValue + Lane4::sReplicate(inFraction) * inDestination.mValue);
 }
 
 Quat Quat::SLERP(QuatArg inDestination, float inFraction) const
@@ -326,7 +326,7 @@ Quat Quat::SLERP(QuatArg inDestination, float inFraction) const
 	}
 
 	// Interpolate between the two quaternions
-	return Quat(Vec4::sReplicate(scale0) * mValue + Vec4::sReplicate(scale1) * inDestination.mValue).Normalized();
+	return Quat(Lane4::sReplicate(scale0) * mValue + Lane4::sReplicate(scale1) * inDestination.mValue).Normalized();
 }
 
 Vec3 Quat::operator * (Vec3Arg inValue) const
@@ -368,24 +368,24 @@ Vec3 Quat::RotateAxisX() const
 {
 	// This is *this * Vec3::sAxisX() written out:
 	JPH_ASSERT(IsNormalized());
-	Vec4 t = mValue + mValue;
-	return Vec3(t.SplatX() * mValue + (t.SplatW() * mValue.Swizzle<SWIZZLE_W, SWIZZLE_Z, SWIZZLE_Y, SWIZZLE_X>()).FlipSign<1, 1, -1, 1>() - Vec4(1, 0, 0, 0));
+	Lane4 t = mValue + mValue;
+	return Vec3(t.SplatX() * mValue + (t.SplatW() * mValue.Swizzle<SWIZZLE_W, SWIZZLE_Z, SWIZZLE_Y, SWIZZLE_X>()).FlipSign<1, 1, -1, 1>() - Lane4(1, 0, 0, 0));
 }
 
 Vec3 Quat::RotateAxisY() const
 {
 	// This is *this * Vec3::sAxisY() written out:
 	JPH_ASSERT(IsNormalized());
-	Vec4 t = mValue + mValue;
-	return Vec3(t.SplatY() * mValue + (t.SplatW() * mValue.Swizzle<SWIZZLE_Z, SWIZZLE_W, SWIZZLE_X, SWIZZLE_Y>()).FlipSign<-1, 1, 1, 1>() - Vec4(0, 1, 0, 0));
+	Lane4 t = mValue + mValue;
+	return Vec3(t.SplatY() * mValue + (t.SplatW() * mValue.Swizzle<SWIZZLE_Z, SWIZZLE_W, SWIZZLE_X, SWIZZLE_Y>()).FlipSign<-1, 1, 1, 1>() - Lane4(0, 1, 0, 0));
 }
 
 Vec3 Quat::RotateAxisZ() const
 {
 	// This is *this * Vec3::sAxisZ() written out:
 	JPH_ASSERT(IsNormalized());
-	Vec4 t = mValue + mValue;
-	return Vec3(t.SplatZ() * mValue + (t.SplatW() * mValue.Swizzle<SWIZZLE_Y, SWIZZLE_X, SWIZZLE_W, SWIZZLE_Z>()).FlipSign<1, -1, 1, 1>() - Vec4(0, 0, 1, 0));
+	Lane4 t = mValue + mValue;
+	return Vec3(t.SplatZ() * mValue + (t.SplatW() * mValue.Swizzle<SWIZZLE_Y, SWIZZLE_X, SWIZZLE_W, SWIZZLE_Z>()).FlipSign<1, -1, 1, 1>() - Lane4(0, 0, 1, 0));
 }
 
 void Quat::StoreFloat3(Float3 *outV) const
@@ -403,7 +403,7 @@ Quat Quat::sLoadFloat3Unsafe(const Float3 &inV)
 {
 	Vec3 v = Vec3::sLoadFloat3Unsafe(inV);
 	float w = sqrt(max(1.0f - v.LengthSq(), 0.0f)); // It is possible that the length of v is a fraction above 1, and we don't want to introduce NaN's in that case so we clamp to 0
-	return Quat(Vec4(v, w));
+	return Quat(Lane4(v, w));
 }
 
 JPH_NAMESPACE_END

@@ -234,7 +234,7 @@ public:
 	uint32					GetIndexInActiveBodiesInternal() const							{ return mIndexInActiveBodies; }
 
 #ifdef JPH_DOUBLE_PRECISION
-	inline DVec3			GetSleepTestOffset() const										{ return DVec3::sLoadDouble3Unsafe(mSleepTestOffset); }
+	inline DVec4			GetSleepTestOffset() const										{ return DVec4::sLoadDouble3Unsafe(mSleepTestOffset); }
 #endif // JPH_DOUBLE_PRECISION
 
 	/// Reset spheres to center around inPoints with radius 0

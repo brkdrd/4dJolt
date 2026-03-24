@@ -41,7 +41,7 @@ public:
 		if (!IsEOF() && !IsFailed())
 		{
 			outT.resize(len);
-			if constexpr (std::is_same_v<T, Vec3> || std::is_same_v<T, DVec3> || std::is_same_v<T, DMat44>)
+			if constexpr (std::is_same_v<T, Vec3> || std::is_same_v<T, DVec4>)
 			{
 				// These types have unused components that we don't want to read
 				for (typename Array<T, A>::size_type i = 0; i < len; ++i)
@@ -95,25 +95,11 @@ public:
 		outVec = Vec3::sFixW(outVec.mValue);
 	}
 
-	/// Read a DVec3 (don't read W)
-	void				Read(DVec3 &outVec)
+	/// Read a DVec4 (don't read W)
+	void				Read(DVec4 &outVec)
 	{
 		ReadBytes(&outVec, 3 * sizeof(double));
-		outVec = DVec3::sFixW(outVec.mValue);
-	}
-
-	/// Read a DMat44 (don't read W component of translation)
-	void				Read(DMat44 &outVec)
-	{
-		Vec4 x, y, z;
-		Read(x);
-		Read(y);
-		Read(z);
-
-		DVec3 t;
-		Read(t);
-
-		outVec = DMat44(x, y, z, t);
+		outVec = DVec4::sFixW(outVec.mValue);
 	}
 };
 
