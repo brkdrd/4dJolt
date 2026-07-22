@@ -26,11 +26,15 @@ set(UNIT_TESTS_SRC_FILES
 	${UNIT_TESTS_ROOT}/Geometry/GJKTests.cpp
 	${UNIT_TESTS_ROOT}/Geometry/PlaneTests.cpp
 	${UNIT_TESTS_ROOT}/Geometry/RayAABoxTests.cpp
+	${UNIT_TESTS_ROOT}/Geometry/RaySphereTests.cpp
+	${UNIT_TESTS_ROOT}/Geometry/RayTetrahedronTests.cpp
+	${UNIT_TESTS_ROOT}/Geometry/RayTriangleTests.cpp
 	${UNIT_TESTS_ROOT}/Layers.h
 	${UNIT_TESTS_ROOT}/LoggingBodyActivationListener.h
 	${UNIT_TESTS_ROOT}/LoggingContactListener.h
 	${UNIT_TESTS_ROOT}/Math/BVec16Tests.cpp
-	${UNIT_TESTS_ROOT}/Math/DMat44Tests.cpp
+	${UNIT_TESTS_ROOT}/Math/BivecTests.cpp
+	${UNIT_TESTS_ROOT}/Math/Cl4Reference.h
 	${UNIT_TESTS_ROOT}/Math/DVec4Tests.cpp
 	${UNIT_TESTS_ROOT}/Math/EigenValueSymmetricTests.cpp
 	${UNIT_TESTS_ROOT}/Math/HalfFloatTests.cpp
@@ -38,10 +42,13 @@ set(UNIT_TESTS_SRC_FILES
 	${UNIT_TESTS_ROOT}/Math/MathTests.cpp
 	${UNIT_TESTS_ROOT}/Math/MatrixTests.cpp
 	${UNIT_TESTS_ROOT}/Math/QuatTests.cpp
+	${UNIT_TESTS_ROOT}/Math/RMat44Tests.cpp
+	${UNIT_TESTS_ROOT}/Math/RotorTests.cpp
 	${UNIT_TESTS_ROOT}/Math/UVec4Tests.cpp
 	${UNIT_TESTS_ROOT}/Math/TrigonometryTests.cpp
 	${UNIT_TESTS_ROOT}/Math/Vec3Tests.cpp
 	${UNIT_TESTS_ROOT}/Math/Vec4Tests.cpp
+	${UNIT_TESTS_ROOT}/Math/Vec8Tests.cpp
 	${UNIT_TESTS_ROOT}/Math/VectorTests.cpp
 	${UNIT_TESTS_ROOT}/Physics/ActiveEdgesTests.cpp
 	${UNIT_TESTS_ROOT}/Physics/BroadPhaseTests.cpp
