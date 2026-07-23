@@ -10,6 +10,9 @@
 #include <Jolt/Physics/Collision/Shape/SubShapeID.h>
 #include <Jolt/Physics/Collision/BackFaceMode.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Math/RMat44.h>
+#include <Jolt/Math/Rotor.h>
+#include <Jolt/Math/Float4.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -29,7 +32,7 @@ public:
 
 	/// Constructor
 								TransformedShape() = default;
-								TransformedShape(RVec3Arg inPositionCOM, QuatArg inRotation, const Shape *inShape, const BodyID &inBodyID, const SubShapeIDCreator &inSubShapeIDCreator = SubShapeIDCreator()) : mShapePositionCOM(inPositionCOM), mShapeRotation(inRotation), mShape(inShape), mBodyID(inBodyID), mSubShapeIDCreator(inSubShapeIDCreator) { }
+								TransformedShape(RVec4Arg inPositionCOM, RotorArg inRotation, const Shape *inShape, const BodyID &inBodyID, const SubShapeIDCreator &inSubShapeIDCreator = SubShapeIDCreator()) : mShapePositionCOM(inPositionCOM), mShapeRotation(inRotation), mShape(inShape), mBodyID(inBodyID), mSubShapeIDCreator(inSubShapeIDCreator) { }
 
 	/// Cast a ray and find the closest hit. Returns true if it finds a hit. Hits further than ioHit.mFraction will not be considered and in this case ioHit will remain unmodified (and the function will return false).
 	/// Convex objects will be treated as solid (meaning if the ray starts inside, you'll get a hit fraction of 0) and back face hits are returned.
@@ -43,7 +46,7 @@ public:
 	/// Check if inPoint is inside any shapes. For this tests all shapes are treated as if they were solid.
 	/// For a mesh shape, this test will only provide sensible information if the mesh is a closed manifold.
 	/// For each shape that collides, ioCollector will receive a hit
-	void						CollidePoint(RVec3Arg inPoint, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const;
+	void						CollidePoint(RVec4Arg inPoint, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const;
 
 	/// Collide a shape and report any hits to ioCollector
 	/// @param inShape Shape to test
@@ -53,7 +56,7 @@ public:
 	/// @param inBaseOffset All hit results will be returned relative to this offset, can be zero to get results in world position, but when you're testing far from the origin you get better precision by picking a position that's closer e.g. mShapePositionCOM since floats are most accurate near the origin
 	/// @param ioCollector Collector that receives the hits
 	/// @param inShapeFilter Filter that allows you to reject collisions
-	void						CollideShape(const Shape *inShape, Vec3Arg inShapeScale, RMat44Arg inCenterOfMassTransform, const CollideShapeSettings &inCollideShapeSettings, RVec3Arg inBaseOffset, CollideShapeCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const;
+	void						CollideShape(const Shape *inShape, Vec4Arg inShapeScale, RMat44Arg inCenterOfMassTransform, const CollideShapeSettings &inCollideShapeSettings, RVec4Arg inBaseOffset, CollideShapeCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const;
 
 	/// Cast a shape and report any hits to ioCollector
 	/// @param inShapeCast The shape cast and its position and direction
@@ -61,7 +64,7 @@ public:
 	/// @param inBaseOffset All hit results will be returned relative to this offset, can be zero to get results in world position, but when you're testing far from the origin you get better precision by picking a position that's closer e.g. mShapePositionCOM or inShapeCast.mCenterOfMassStart.GetTranslation() since floats are most accurate near the origin
 	/// @param ioCollector Collector that receives the hits
 	/// @param inShapeFilter Filter that allows you to reject collisions
-	void						CastShape(const RShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, RVec3Arg inBaseOffset, CastShapeCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const;
+	void						CastShape(const RShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, RVec4Arg inBaseOffset, CastShapeCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const;
 
 	/// Collect the leaf transformed shapes of all leaf shapes of this shape
 	/// inBox is the world space axis aligned box which leaf shapes should collide with
@@ -75,7 +78,7 @@ public:
 	/// @param ioContext A temporary buffer and should remain untouched until the last call to GetTrianglesNext.
 	/// @param inBox The world space bounding in which you want to get the triangles.
 	/// @param inBaseOffset All hit results will be returned relative to this offset, can be zero to get results in world position, but when you're testing far from the origin you get better precision by picking a position that's closer e.g. inBox.GetCenter() since floats are most accurate near the origin
-	void						GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, RVec3Arg inBaseOffset) const;
+	void						GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, RVec4Arg inBaseOffset) const;
 
 	/// Call this repeatedly to get all triangles in the box.
 	/// outTriangleVertices should be large enough to hold 3 * inMaxTriangleRequested entries
@@ -83,11 +86,13 @@ public:
 	/// The function returns the amount of triangles that it found (which will be <= inMaxTrianglesRequested), or 0 if there are no more triangles.
 	/// Note that the function can return a value < inMaxTrianglesRequested and still have more triangles to process (triangles can be returned in blocks)
 	/// Note that the function may return triangles outside of the requested box, only coarse culling is performed on the returned triangles
-	int							GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float3 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const;
+	// TODO(4D): In 4D the natural boundary primitive is a tetrahedron (3-simplex), not a triangle. The triangle-based
+	// streaming interface is a placeholder until the 4D tessellation representation is finalized.
+	int							GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float4 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const;
 
-	/// Get/set the scale of the shape as a Vec3
-	inline Vec3					GetShapeScale() const						{ return Vec3::sLoadFloat3Unsafe(mShapeScale); }
-	inline void					SetShapeScale(Vec3Arg inScale)				{ inScale.StoreFloat3(&mShapeScale); }
+	/// Get/set the scale of the shape as a Vec4
+	inline Vec4					GetShapeScale() const						{ return Vec4(Lane4::sLoadFloat4(&mShapeScale)); }
+	inline void					SetShapeScale(Vec4Arg inScale)				{ inScale.StoreFloat4(&mShapeScale); }
 
 	/// Calculates the transform for this shape's center of mass (excluding scale)
 	inline RMat44				GetCenterOfMassTransform() const			{ return RMat44::sRotationTranslation(mShapeRotation, mShapePositionCOM); }
@@ -96,9 +101,9 @@ public:
 	inline RMat44				GetInverseCenterOfMassTransform() const		{ return RMat44::sInverseRotationTranslation(mShapeRotation, mShapePositionCOM); }
 
 	/// Sets the world transform (including scale) of this transformed shape (not from the center of mass but in the space the shape was created)
-	inline void					SetWorldTransform(RVec3Arg inPosition, QuatArg inRotation, Vec3Arg inScale)
+	inline void					SetWorldTransform(RVec4Arg inPosition, RotorArg inRotation, Vec4Arg inScale)
 	{
-		mShapePositionCOM = inPosition + inRotation * (inScale * mShape->GetCenterOfMass());
+		mShapePositionCOM = inPosition + RVec4(inRotation * (inScale * mShape->GetCenterOfMass()));
 		mShapeRotation = inRotation;
 		SetShapeScale(inScale);
 	}
@@ -106,16 +111,16 @@ public:
 	/// Sets the world transform (including scale) of this transformed shape (not from the center of mass but in the space the shape was created)
 	inline void					SetWorldTransform(RMat44Arg inTransform)
 	{
-		Vec3 scale;
+		Vec4 scale;
 		RMat44 rot_trans = inTransform.Decompose(scale);
-		SetWorldTransform(rot_trans.GetTranslation(), rot_trans.GetQuaternion(), scale);
+		SetWorldTransform(rot_trans.GetTranslation(), rot_trans.GetRotation().GetRotor(), scale);
 	}
 
 	/// Calculates the world transform including scale of this shape (not from the center of mass but in the space the shape was created)
 	inline RMat44				GetWorldTransform() const
 	{
 		RMat44 transform = RMat44::sRotation(mShapeRotation).PreScaled(GetShapeScale());
-		transform.SetTranslation(mShapePositionCOM - transform.Multiply3x3(mShape->GetCenterOfMass()));
+		transform.SetTranslation(mShapePositionCOM - RVec4(transform.Multiply3x3(mShape->GetCenterOfMass())));
 		return transform;
 	}
 
@@ -135,11 +140,11 @@ public:
 
 	/// Get surface normal of a particular sub shape and its world space surface position on this body.
 	/// Note: When you have a CollideShapeResult or ShapeCastResult you should use -mPenetrationAxis.Normalized() as contact normal as GetWorldSpaceSurfaceNormal will only return face normals (and not vertex or edge normals).
-	inline Vec3					GetWorldSpaceSurfaceNormal(const SubShapeID &inSubShapeID, RVec3Arg inPosition) const
+	inline Vec4					GetWorldSpaceSurfaceNormal(const SubShapeID &inSubShapeID, RVec4Arg inPosition) const
 	{
 		RMat44 inv_com = GetInverseCenterOfMassTransform();
-		Vec3 scale = GetShapeScale(); // See comment at ScaledShape::GetSurfaceNormal for the math behind the scaling of the normal
-		return inv_com.Multiply3x3Transposed(mShape->GetSurfaceNormal(MakeSubShapeIDRelativeToShape(inSubShapeID), Vec3(inv_com * inPosition) / scale) / scale).Normalized();
+		Vec4 scale = GetShapeScale(); // See comment at ScaledShape::GetSurfaceNormal for the math behind the scaling of the normal
+		return inv_com.Multiply3x3Transposed(mShape->GetSurfaceNormal(MakeSubShapeIDRelativeToShape(inSubShapeID), Vec4(inv_com * inPosition) / scale) / scale).Normalized();
 	}
 
 	/// Get the vertices of the face that faces inDirection the most (includes any convex radius). Note that this function can only return faces of
@@ -148,9 +153,9 @@ public:
 	/// @param inDirection Direction that the face should be facing (in world space)
 	/// @param inBaseOffset The vertices will be returned relative to this offset, can be zero to get results in world position, but when you're testing far from the origin you get better precision by picking a position that's closer e.g. mShapePositionCOM since floats are most accurate near the origin
 	/// @param outVertices Resulting face. Note the returned face can have a single point if the shape doesn't have polygons to return (e.g. because it's a sphere). The face will be returned in world space.
-	void						GetSupportingFace(const SubShapeID &inSubShapeID, Vec3Arg inDirection, RVec3Arg inBaseOffset, Shape::SupportingFace &outVertices) const
+	void						GetSupportingFace(const SubShapeID &inSubShapeID, Vec4Arg inDirection, RVec4Arg inBaseOffset, Shape::SupportingFace &outVertices) const
 	{
-		Mat44 com = GetCenterOfMassTransform().PostTranslated(-inBaseOffset).ToMat44();
+		RMat44 com = GetCenterOfMassTransform().PostTranslated(-inBaseOffset);
 		mShape->GetSupportingFace(MakeSubShapeIDRelativeToShape(inSubShapeID), com.Multiply3x3Transposed(inDirection), GetShapeScale(), com, outVertices);
 	}
 
@@ -172,7 +177,7 @@ public:
 	/// @return Direct child sub shape and its transform, note that the body ID and sub shape ID will be invalid
 	TransformedShape			GetSubShapeTransformedShape(const SubShapeID &inSubShapeID, SubShapeID &outRemainder) const
 	{
-		TransformedShape ts = mShape->GetSubShapeTransformedShape(inSubShapeID, Vec3::sZero(), mShapeRotation, GetShapeScale(), outRemainder);
+		TransformedShape ts = mShape->GetSubShapeTransformedShape(inSubShapeID, Vec4::sZero(), mShapeRotation, GetShapeScale(), outRemainder);
 		ts.mShapePositionCOM += mShapePositionCOM;
 		return ts;
 	}
@@ -180,15 +185,15 @@ public:
 	/// Helper function to return the body id from a transformed shape. If the transformed shape is null an invalid body ID will be returned.
 	inline static BodyID		sGetBodyID(const TransformedShape *inTS)	{ return inTS != nullptr? inTS->mBodyID : BodyID(); }
 
-	RVec3						mShapePositionCOM;							///< Center of mass world position of the shape
-	Quat						mShapeRotation;								///< Rotation of the shape
+	RVec4						mShapePositionCOM;							///< Center of mass world position of the shape (4D)
+	Rotor						mShapeRotation;								///< Rotation of the shape (4D Cl(4,0) rotor)
 	RefConst<Shape>				mShape;										///< The shape itself
-	Float3						mShapeScale { 1, 1, 1 };					///< Not stored as Vec3 to get a nicely packed structure
+	Float4						mShapeScale { 1, 1, 1, 1 };					///< Not stored as Vec4 to get a nicely packed structure
 	BodyID						mBodyID;									///< Optional body ID from which this shape comes
 	SubShapeIDCreator			mSubShapeIDCreator;							///< Optional sub shape ID creator for the shape (can be used when expanding compound shapes into multiple transformed shapes)
 };
 
-static_assert(sizeof(void *) != 8 || JPH_RVECTOR_ALIGNMENT < 16 || sizeof(TransformedShape) == JPH_IF_SINGLE_PRECISION_ELSE(64, 96), "Not properly packed");
-static_assert(alignof(TransformedShape) == max(JPH_VECTOR_ALIGNMENT, JPH_RVECTOR_ALIGNMENT), "Not properly aligned");
+// TODO(4D): Revisit packing once 4D sizes have stabilized (Rotor is 8 floats, Float4 is 4 floats,
+// RVec4 is 4 floats single / 4 doubles double). The original 3D static_asserts no longer apply.
 
 JPH_NAMESPACE_END

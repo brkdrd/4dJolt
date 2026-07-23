@@ -245,8 +245,9 @@ public:
 
 		int axis = inDirection.Abs().GetHighestComponentIndex();
 
-		// The fixed coordinate on the dominant axis
-		float fixed_val = (inDirection[axis] < 0.0f) ? mMax[axis] : mMin[axis];
+		// The fixed coordinate on the dominant axis: the face whose outward normal faces
+		// inDirection the most, i.e. mMax for a positive component (consistent with GetSupport)
+		float fixed_val = (inDirection[axis] < 0.0f) ? mMin[axis] : mMax[axis];
 
 		// Generate 2^3 = 8 combinations of min/max for the other 3 coordinates
 		int other[3];
