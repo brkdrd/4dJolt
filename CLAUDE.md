@@ -22,9 +22,10 @@ cmake --build build -j$(nproc)                        # currently FAILS, see sta
 ./build/UnitTests                                     # binary in repo is STALE (pre-4D tests) — do not trust it
 ```
 
-**Current build status (verified 2026-07-22): broken, ~3,400 errors** with `make -k` (down
-from ~3,800 after the AABox include fix, Phase A step 4). The trivial first-blocker cascade is
-gone; every remaining error is in an un-migrated layer, so the counts are now meaningful.
+**Current build status (verified 2026-07-22): broken, ~3,290 errors** with `make -k` (down
+from ~3,800: AABox include fix in Phase A, then the TransformedShape/Shape base fixes in Phase
+B step 6). The trivial first-blocker cascade is gone; every remaining error is in an un-migrated
+layer, so the counts are now meaningful.
 Error census by area: ConstraintPart headers (~840, the largest), DebugRenderer (~260), Shape
 hierarchy (~700), SoftBody/Character/Hair/PhysicsSystem (~200). Dominant error classes:
 `Vec3 ↔ Bivec` conversions, `Body::GetInverseInertia` removed, `Mat44::Multiply3x3` removed,
@@ -97,8 +98,16 @@ AABoxCast` settings structs, `ScaleHelpers.h`.
 MassProperties correctly stores the 4×4 second-moment tensor `M_ij = ∫ρ xᵢxⱼ dV` with correct
 Rotate/Translate/Scale and the mapping to 6 bivector moments `I_ij = M_ii + M_jj`.
 
-**Untouched (still 3D, does not compile):** BroadPhase (QuadTree), all other Shape classes
-(Box, Capsule, Cylinder, Mesh, HeightField, Compound, Decorated, Plane, Triangle, Tapered*…),
+`BoxShape` is now ported to 4D (tesseract, Phase B step 6, 2026-07-22): Vec4 half extent,
+tesseract mass properties, 4D AABox support / supporting-face (a cubic cell), 4D ray cast.
+Its 4D content is verified standalone (mass = ∏edges·density, diagonal second moments
+m·Sᵢ²/12, support corners, supporting-cell selection). **Caveat:** `BoxShape.cpp` compiles
+clean on its own, but the shape *base* layer (`Shape.cpp`, `ConvexShape.cpp`, `SphereShape.cpp`)
+still has un-migrated errors, so no shape TU links yet — porting individual shapes is ahead of
+the base-layer cleanup.
+
+**Untouched (still 3D, does not compile):** BroadPhase (QuadTree), the other Shape classes
+(Capsule, Cylinder, Mesh, HeightField, Compound, Decorated, Plane, Triangle, Tapered*…),
 the entire constraint/contact solver (`Constraints/`, `ContactConstraintManager`, all
 `ConstraintPart/*`), `PhysicsSystem.cpp` stepping loop, islands, DebugRenderer, SoftBody,
 Character, Vehicle, Ragdoll, Hair, TestFramework/Samples/JoltViewer.
@@ -268,10 +277,17 @@ PerformanceTest runs on a 4D scene.
 5. DONE (2026-07-22): ObjectStream primitives for Rotor/Bivec (text + binary), excluded
    `BodyCreationSettings` attributes re-enabled, DeterminismLog operators for Rotor/Bivec added.
    Verified by `RotorBivecStreamTest`. Remaining nit: `DVec4` serialization still drops W (bug #6).
-6. Shape layer for the v1 shape set (Box→tesseract mass properties & support fn, Capsule,
-   Plane, Compound/Decorated/Scaled/RotatedTranslated/OffsetCOM mechanical ports); stub or
-   cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle/SoftBodyShape; make
-   GetSupportingFace return 4D faces (feeds Phase B step 8).
+6. Shape layer for the v1 shape set. IN PROGRESS (2026-07-22):
+   - DONE: `BoxShape` → tesseract (mass properties, 4D support fn + cubic-cell supporting face,
+     4D ray cast), mirroring `SphereShape`. Two bugs fixed while porting: `AABox::GetSupportingFace`
+     sign (picked the wrong cell) and `TransformedShape::ToRotor` typo; `Shape::GetSubmergedVolume`
+     inBaseOffset made unconditional for renderer-off consistency.
+   - **Next / blocker:** the shape *base* layer (`Shape.cpp`, `ConvexShape.cpp`, `SphereShape.cpp`)
+     still has its own migration errors, so no shape TU links yet — do a base-layer cleanup pass
+     (with `JPH_DEBUG_RENDERER` off, the headless v1 target) before/alongside porting more shapes.
+   - TODO: Capsule, Plane, Compound/Decorated/Scaled/RotatedTranslated/OffsetCOM wrappers; stub or
+     cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle/SoftBodyShape; a permanent BoxShape
+     mass-properties unit test (needs the physics test framework, currently unlinkable).
 7. BroadPhase: QuadTree AABB logic → 4D AABox (mostly mechanical; AABox4 SIMD already done).
 8. Contact manifold pipeline (conceptual gap 1): supporting-face polyhedra, halfspace clipping,
    ≥5-point manifold reduction, `ContactConstraintManager`.
