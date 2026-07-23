@@ -225,14 +225,11 @@ TEST_SUITE("RotorTests")
 		}
 	}
 
-	// EXPECTED TO FAIL until CLAUDE.md P0 bug #8 is fixed (discovered by this suite):
-	// Mat44::GetRotor recovers the wrong sign for the e23, e24, e34 (and e1234) components: for a
-	// coordinate-plane rotation it round-trips correctly in the e12/e13/e14 planes but returns the
-	// opposite rotation in the e23/e24/e34 planes (verified plane by plane). Equivalently it
-	// negates the anti-self-dual content, so sRotation(GetRotor(M)) != M for essentially every
-	// rotation that is not confined to an e1-containing coordinate 2-plane -- general-plane simple
-	// rotations, double/isoclinic rotations and generic rotors all fail. GetRotor must be a true
-	// inverse of sRotation for every rotor, up to the overall +-R double-cover sign.
+	// Regression test for CLAUDE.md P0 bug #8 (discovered by this suite): Mat44::GetRotor used to
+	// recover the wrong sign for the e23/e24/e34/e1234 (anti-self-dual) components, so it returned
+	// the opposite rotation in the e23/e24/e34 planes and sRotation(GetRotor(M)) != M for any
+	// rotation not confined to an e1-containing coordinate 2-plane. GetRotor must be a true inverse
+	// of sRotation for every rotor, up to the overall +-R double-cover sign.
 	TEST_CASE("TestRotorMatrixRoundTrip")
 	{
 		UnitTestRandom random(90123);

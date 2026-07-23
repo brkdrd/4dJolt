@@ -44,9 +44,9 @@ TEST_SUITE("RMat44Tests")
 		CHECK_APPROX_EQUAL(m.Multiply3x3Transposed(r * p), p, 1.0e-5f);
 	}
 
-	// EXPECTED TO FAIL until CLAUDE.md P0 bug #8 is fixed (see RotorTests):
-	// RMat44::GetRotor forwards to Mat44::GetRotor, which recovers the wrong sign for the second
-	// rotation plane of a double rotation. sTestRotor is a double rotation, so this exposes it.
+	// Regression test for CLAUDE.md P0 bug #8 (see RotorTests): RMat44::GetRotor forwards to
+	// Mat44::GetRotor, which used to recover the wrong sign for the second rotation plane of a
+	// double rotation. sTestRotor is a double rotation, so this exercises it.
 	TEST_CASE("TestRMat44GetRotor")
 	{
 		Rotor r = sTestRotor();

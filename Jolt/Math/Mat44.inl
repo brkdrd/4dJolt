@@ -753,16 +753,21 @@ Rotor Mat44::GetRotor() const
 	float qly = c0w*qry - c0x*qrz + c0y*qrw + c0z*qrx;
 	float qlz = c0w*qrz + c0x*qry - c0y*qrx + c0z*qrw;
 
-	// Step 5: Convert (q_L, q_R) pair to rotor components [s, e12, e13, e14, e23, e24, e34, e1234]
+	// Step 5: Convert (q_L, q_R) pair to rotor components [s, e12, e13, e14, e23, e24, e34, e1234].
+	// The (qL, qR) computed above are labeled mirror to the rotor's SU(2) split convention (see
+	// Rotor.inl: qL is the +e1234 eigenspace factor), i.e. their roles are swapped relative to the
+	// rotor. Swapping qL<->qR negates exactly the anti-self-dual components e23/e24/e34/e1234 while
+	// leaving s/e12/e13/e14 unchanged, which is applied here. Without it GetRotor returns the
+	// opposite rotation in the e23/e24/e34 planes and sRotation(GetRotor(M)) != M.
 	return Rotor(
 		(qlw + qrw) * 0.5f,			// s
 		(qrx - qlx) * 0.5f,			// e12
 		(qry - qly) * 0.5f,			// e13
 		(qrz - qlz) * 0.5f,			// e14
-		(qrz + qlz) * 0.5f,			// e23
-		-(qry + qly) * 0.5f,			// e24
-		(qrx + qlx) * 0.5f,			// e34
-		(qlw - qrw) * 0.5f				// e1234
+		-(qrz + qlz) * 0.5f,		// e23
+		(qry + qly) * 0.5f,			// e24
+		-(qrx + qlx) * 0.5f,		// e34
+		(qrw - qlw) * 0.5f			// e1234
 	).Normalized();
 }
 
