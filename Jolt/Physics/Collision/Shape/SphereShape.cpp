@@ -6,7 +6,6 @@
 
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/ScaleHelpers.h>
-#include <Jolt/Physics/Collision/Shape/GetTrianglesContext.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
@@ -50,24 +49,24 @@ SphereShape::SphereShape(const SphereShapeSettings &inSettings, ShapeResult &out
 	outResult.Set(this);
 }
 
-float SphereShape::GetScaledRadius(Vec3Arg inScale) const
+float SphereShape::GetScaledRadius(Vec4Arg inScale) const
 {
 	JPH_ASSERT(IsValidScale(inScale));
 
-	Vec3 abs_scale = inScale.Abs();
+	Vec4 abs_scale = inScale.Abs();
 	return abs_scale.GetX() * mRadius;
 }
 
 AABox SphereShape::GetLocalBounds() const
 {
-	Vec3 half_extent = Vec3::sReplicate(mRadius);
+	Vec4 half_extent = Vec4::sReplicate(mRadius);
 	return AABox(-half_extent, half_extent);
 }
 
-AABox SphereShape::GetWorldSpaceBounds(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale) const
+AABox SphereShape::GetWorldSpaceBounds(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale) const
 {
 	float scaled_radius = GetScaledRadius(inScale);
-	Vec3 half_extent = Vec3::sReplicate(scaled_radius);
+	Vec4 half_extent = Vec4::sReplicate(scaled_radius);
 	AABox bounds(-half_extent, half_extent);
 	bounds.Translate(inCenterOfMassTransform.GetTranslation());
 	return bounds;
@@ -83,9 +82,9 @@ public:
 		JPH_ASSERT(IsAligned(this, alignof(SphereNoConvex)));
 	}
 
-	virtual Vec3	GetSupport(Vec3Arg inDirection) const override
+	virtual Vec4	GetSupport(Vec4Arg inDirection) const override
 	{
-		return Vec3::sZero();
+		return Vec4::sZero();
 	}
 
 	virtual float	GetConvexRadius() const override
@@ -107,10 +106,10 @@ public:
 		JPH_ASSERT(IsAligned(this, alignof(SphereWithConvex)));
 	}
 
-	virtual Vec3	GetSupport(Vec3Arg inDirection) const override
+	virtual Vec4	GetSupport(Vec4Arg inDirection) const override
 	{
 		float len = inDirection.Length();
-		return len > 0.0f? (mRadius / len) * inDirection : Vec3::sZero();
+		return len > 0.0f? (mRadius / len) * inDirection : Vec4::sZero();
 	}
 
 	virtual float	GetConvexRadius() const override
@@ -122,7 +121,7 @@ private:
 	float			mRadius;
 };
 
-const ConvexShape::Support *SphereShape::GetSupportFunction(ESupportMode inMode, SupportBuffer &inBuffer, Vec3Arg inScale) const
+const ConvexShape::Support *SphereShape::GetSupportFunction(ESupportMode inMode, SupportBuffer &inBuffer, Vec4Arg inScale) const
 {
 	float scaled_radius = GetScaledRadius(inScale);
 
@@ -144,84 +143,94 @@ MassProperties SphereShape::GetMassProperties() const
 {
 	MassProperties p;
 
-	// Calculate mass
+	// Calculate mass: 4-ball hypervolume = pi^2/2 * r^4, multiplied by density
 	float r2 = mRadius * mRadius;
-	p.mMass = (4.0f / 3.0f * JPH_PI) * mRadius * r2 * GetDensity();
+	float r4 = r2 * r2;
+	p.mMass = (0.5f * JPH_PI * JPH_PI) * r4 * GetDensity();
 
-	// Calculate inertia
-	float inertia = (2.0f / 5.0f) * p.mMass * r2;
-	p.mInertia = Mat44::sScale(inertia);
+	// Calculate moment of inertia about each bivector plane.
+	// For an n-ball the planar moment of inertia is mass * r^2 * 2/(n+2); for n=4 that gives mass * r^2 / 3.
+	// Since the 4D inertia operator maps bivectors to bivectors and here the sphere is rotationally isotropic,
+	// the inertia is diagonal in the bivector basis with equal components.
+	// TODO(4D): MassProperties currently stores inertia as a Mat44 for legacy reasons. Revisit when
+	// the full 6-component bivector inertia representation is finalized.
+	float inertia = (1.0f / 3.0f) * p.mMass * r2;
+	Mat44 m = Mat44::sZero();
+	m(0, 0) = inertia;
+	m(1, 1) = inertia;
+	m(2, 2) = inertia;
+	m(3, 3) = inertia;
+	p.mInertia = m;
 
 	return p;
 }
 
-Vec3 SphereShape::GetSurfaceNormal(const SubShapeID &inSubShapeID, Vec3Arg inLocalSurfacePosition) const
+Vec4 SphereShape::GetSurfaceNormal(const SubShapeID &inSubShapeID, Vec4Arg inLocalSurfacePosition) const
 {
 	JPH_ASSERT(inSubShapeID.IsEmpty(), "Invalid subshape ID");
 
 	float len = inLocalSurfacePosition.Length();
-	return len != 0.0f? inLocalSurfacePosition / len : Vec3::sAxisY();
+	return len != 0.0f? inLocalSurfacePosition / len : Vec4::sAxisY();
 }
 
-void SphereShape::GetSubmergedVolume(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec3 &outCenterOfBuoyancy JPH_IF_DEBUG_RENDERER(, RVec3Arg inBaseOffset)) const
+void SphereShape::GetSubmergedVolume(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec4 &outCenterOfBuoyancy, RVec4Arg inBaseOffset) const
 {
 	float scaled_radius = GetScaledRadius(inScale);
-	outTotalVolume = (4.0f / 3.0f * JPH_PI) * Cubed(scaled_radius);
+	float r2 = scaled_radius * scaled_radius;
+	// 4-ball hypervolume = pi^2/2 * r^4
+	outTotalVolume = (0.5f * JPH_PI * JPH_PI) * r2 * r2;
 
-	float distance_to_surface = inSurface.SignedDistance(inCenterOfMassTransform.GetTranslation());
+	float distance_to_surface = inSurface.SignedDistance(Vec4(inCenterOfMassTransform.GetTranslation()));
 	if (distance_to_surface >= scaled_radius)
 	{
 		// Above surface
 		outSubmergedVolume = 0.0f;
-		outCenterOfBuoyancy = Vec3::sZero();
+		outCenterOfBuoyancy = Vec4::sZero();
 	}
 	else if (distance_to_surface <= -scaled_radius)
 	{
 		// Under surface
 		outSubmergedVolume = outTotalVolume;
-		outCenterOfBuoyancy = inCenterOfMassTransform.GetTranslation();
+		outCenterOfBuoyancy = Vec4(inCenterOfMassTransform.GetTranslation());
 	}
 	else
 	{
-		// Intersecting surface
+		// Intersecting surface.
+		// TODO(4D): Exact submerged-hypervolume of a 4-ball cut by a hyperplane involves a 4D
+		// spherical cap formula (incomplete beta function). Placeholder: linear interpolation
+		// between 0 and full volume by signed distance across the diameter. This is coarse but
+		// keeps buoyancy approximately continuous until a closed-form is added.
+		float t = 0.5f - distance_to_surface / (2.0f * scaled_radius);
+		outSubmergedVolume = t * outTotalVolume;
 
-		// Calculate submerged volume, see: https://en.wikipedia.org/wiki/Spherical_cap
-		float h = scaled_radius - distance_to_surface;
-		outSubmergedVolume = (JPH_PI / 3.0f) * Square(h) * (3.0f * scaled_radius - h);
-
-		// Calculate center of buoyancy, see: http://mathworld.wolfram.com/SphericalCap.html (eq 10)
-		float z = (3.0f / 4.0f) * Square(2.0f * scaled_radius - h) / (3.0f * scaled_radius - h);
-		outCenterOfBuoyancy = inCenterOfMassTransform.GetTranslation() - z * inSurface.GetNormal(); // Negative normal since we want the portion under the water
+		// Center-of-buoyancy placeholder: the sphere center offset into the submerged half by a fraction
+		// of the radius proportional to the cap thickness.
+		float z = 0.5f * (scaled_radius - distance_to_surface);
+		outCenterOfBuoyancy = Vec4(inCenterOfMassTransform.GetTranslation()) - z * inSurface.GetNormal();
 
 	#ifdef JPH_DEBUG_RENDERER
-		// Draw intersection between sphere and water plane
-		if (sDrawSubmergedVolumes)
-		{
-			Vec3 circle_center = inCenterOfMassTransform.GetTranslation() - distance_to_surface * inSurface.GetNormal();
-			float circle_radius = sqrt(Square(scaled_radius) - Square(distance_to_surface));
-			DebugRenderer::sInstance->DrawPie(inBaseOffset + circle_center, circle_radius, inSurface.GetNormal(), inSurface.GetNormal().GetNormalizedPerpendicular(), -JPH_PI, JPH_PI, Color::sGreen, DebugRenderer::ECastShadow::Off);
-		}
+		(void)inBaseOffset;
 	#endif // JPH_DEBUG_RENDERER
 	}
 
 #ifdef JPH_DEBUG_RENDERER
-	// Draw center of buoyancy
-	if (sDrawSubmergedVolumes)
-		DebugRenderer::sInstance->DrawWireSphere(inBaseOffset + outCenterOfBuoyancy, 0.05f, Color::sRed, 1);
+	// TODO(4D): Submerged-volume visualization uses 3D DebugRenderer APIs (DrawPie/DrawWireSphere) that
+	// operate on RVec3. Deferred until the renderer is migrated to 4D.
+	(void)inBaseOffset;
 #endif // JPH_DEBUG_RENDERER
 }
 
 #ifdef JPH_DEBUG_RENDERER
-void SphereShape::Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec3Arg inScale, ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const
+void SphereShape::Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const
 {
-	DebugRenderer::EDrawMode draw_mode = inDrawWireframe? DebugRenderer::EDrawMode::Wireframe : DebugRenderer::EDrawMode::Solid;
-	inRenderer->DrawUnitSphere(inCenterOfMassTransform * Mat44::sScale(mRadius * inScale.Abs().GetX()), inUseMaterialColors? GetMaterial()->GetDebugColor() : inColor, DebugRenderer::ECastShadow::On, draw_mode);
+	// TODO(4D): DebugRenderer's DrawUnitSphere expects a 3D transform. Deferred until renderer 4D migration.
+	(void)inRenderer; (void)inCenterOfMassTransform; (void)inScale; (void)inColor; (void)inUseMaterialColors; (void)inDrawWireframe;
 }
 #endif // JPH_DEBUG_RENDERER
 
 bool SphereShape::CastRay(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit) const
 {
-	float fraction = RaySphere(inRay.mOrigin, inRay.mDirection, Vec3::sZero(), mRadius);
+	float fraction = RaySphere(inRay.mOrigin, inRay.mDirection, Vec4::sZero(), mRadius);
 	if (fraction < ioHit.mFraction)
 	{
 		ioHit.mFraction = fraction;
@@ -238,7 +247,7 @@ void SphereShape::CastRay(const RayCast &inRay, const RayCastSettings &inRayCast
 		return;
 
 	float min_fraction, max_fraction;
-	int num_results = RaySphere(inRay.mOrigin, inRay.mDirection, Vec3::sZero(), mRadius, min_fraction, max_fraction);
+	int num_results = RaySphere(inRay.mOrigin, inRay.mDirection, Vec4::sZero(), mRadius, min_fraction, max_fraction);
 	if (num_results > 0 // Ray should intersect
 		&& max_fraction >= 0.0f // End of ray should be inside sphere
 		&& min_fraction < ioCollector.GetEarlyOutFraction()) // Start of ray should be before early out fraction
@@ -266,7 +275,7 @@ void SphereShape::CastRay(const RayCast &inRay, const RayCastSettings &inRayCast
 	}
 }
 
-void SphereShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter) const
+void SphereShape::CollidePoint(Vec4Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter) const
 {
 	// Test shape filter
 	if (!inShapeFilter.ShouldCollide(this, inSubShapeIDCreator.GetID()))
@@ -276,39 +285,25 @@ void SphereShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubSh
 		ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
 }
 
-void SphereShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
+void SphereShape::CollideSoftBodyVertices(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
 {
-	Vec3 center = inCenterOfMassTransform.GetTranslation();
-	float radius = GetScaledRadius(inScale);
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			// Calculate penetration
-			Vec3 delta = v.GetPosition() - center;
-			float distance = delta.Length();
-			float penetration = radius - distance;
-			if (v.UpdatePenetration(penetration))
-			{
-				// Calculate contact point and normal
-				Vec3 normal = distance > 0.0f? delta / distance : Vec3::sAxisY();
-				Vec3 point = center + radius * normal;
-
-				// Store collision
-				v.SetCollision(Plane::sFromPointAndNormal(point, normal), inCollidingShapeIndex);
-			}
-		}
+	// TODO(4D): CollideSoftBodyVertexIterator still exposes Vec3 positions. Once the soft-body
+	// subsystem is migrated to 4D, rewrite this loop to operate on Vec4 directly.
+	(void)inCenterOfMassTransform; (void)inScale; (void)inVertices; (void)inNumVertices; (void)inCollidingShapeIndex;
 }
 
-void SphereShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const
+void SphereShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale) const
 {
-	float scaled_radius = GetScaledRadius(inScale);
-	new (&ioContext) GetTrianglesContextVertexList(inPositionCOM, inRotation, Vec3::sOne(), Mat44::sScale(scaled_radius), sUnitSphereTriangles.data(), sUnitSphereTriangles.size(), GetMaterial());
+	// TODO(4D): GetTrianglesContextVertexList still uses the 3D vertex pipeline. Replaced with a no-op placeholder
+	// until the 4D tessellation (tetrahedra-based boundary) is defined.
+	(void)ioContext; (void)inBox; (void)inPositionCOM; (void)inRotation; (void)inScale;
 }
 
-int SphereShape::GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float3 *outTriangleVertices, const PhysicsMaterial **outMaterials) const
+int SphereShape::GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float4 *outTriangleVertices, const PhysicsMaterial **outMaterials) const
 {
-	return ((GetTrianglesContextVertexList &)ioContext).GetTrianglesNext(inMaxTrianglesRequested, outTriangleVertices, outMaterials);
+	// TODO(4D): See GetTrianglesStart. Returns 0 to indicate no tessellation data is currently produced.
+	(void)ioContext; (void)inMaxTrianglesRequested; (void)outTriangleVertices; (void)outMaterials;
+	return 0;
 }
 
 void SphereShape::SaveBinaryState(StreamOut &inStream) const
@@ -325,14 +320,14 @@ void SphereShape::RestoreBinaryState(StreamIn &inStream)
 	inStream.Read(mRadius);
 }
 
-bool SphereShape::IsValidScale(Vec3Arg inScale) const
+bool SphereShape::IsValidScale(Vec4Arg inScale) const
 {
 	return ConvexShape::IsValidScale(inScale) && ScaleHelpers::IsUniformScale(inScale.Abs());
 }
 
-Vec3 SphereShape::MakeScaleValid(Vec3Arg inScale) const
+Vec4 SphereShape::MakeScaleValid(Vec4Arg inScale) const
 {
-	Vec3 scale = ScaleHelpers::MakeNonZeroScale(inScale);
+	Vec4 scale = ScaleHelpers::MakeNonZeroScale(inScale);
 
 	return scale.GetSign() * ScaleHelpers::MakeUniformScale(scale.Abs());
 }
