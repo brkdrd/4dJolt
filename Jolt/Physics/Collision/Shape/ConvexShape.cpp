@@ -11,8 +11,6 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/Shape/ScaleHelpers.h>
-#include <Jolt/Physics/Collision/Shape/GetTrianglesContext.h>
-#include <Jolt/Physics/Collision/Shape/PolyhedronSubmergedVolumeCalculator.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
 #include <Jolt/Physics/Collision/CollisionDispatch.h>
 #include <Jolt/Physics/Collision/NarrowPhaseStats.h>
@@ -33,16 +31,14 @@ JPH_IMPLEMENT_SERIALIZABLE_ABSTRACT(ConvexShapeSettings)
 	JPH_ADD_ATTRIBUTE(ConvexShapeSettings, mMaterial)
 }
 
-const StaticArray<Vec3, 384> ConvexShape::sUnitSphereTriangles = []() {
-	const int level = 2;
+// Narrow an RVec4 (world/relative position) to Vec4. The center-of-mass transforms passed to the
+// narrow phase are relative to a base offset, so the values are always in single-precision range.
+static JPH_INLINE Vec4 sNarrow(RVec4Arg inV)
+{
+	return Vec4(float(inV.GetX()), float(inV.GetY()), float(inV.GetZ()), float(inV.GetW()));
+}
 
-	StaticArray<Vec3, 384> verts;
-	GetTrianglesContextVertexList::sCreateHalfUnitSphereTop(verts, level);
-	GetTrianglesContextVertexList::sCreateHalfUnitSphereBottom(verts, level);
-	return verts;
-}();
-
-void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inShape2, Vec3Arg inScale1, Vec3Arg inScale2, Mat44Arg inCenterOfMassTransform1, Mat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, const CollideShapeSettings &inCollideShapeSettings, CollideShapeCollector &ioCollector, [[maybe_unused]] const ShapeFilter &inShapeFilter)
+void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inShape2, Vec4Arg inScale1, Vec4Arg inScale2, RMat44Arg inCenterOfMassTransform1, RMat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, const CollideShapeSettings &inCollideShapeSettings, CollideShapeCollector &ioCollector, [[maybe_unused]] const ShapeFilter &inShapeFilter)
 {
 	JPH_PROFILE_FUNCTION();
 
@@ -52,30 +48,33 @@ void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inS
 	const ConvexShape *shape1 = static_cast<const ConvexShape *>(inShape1);
 	const ConvexShape *shape2 = static_cast<const ConvexShape *>(inShape2);
 
-	// Get transforms
-	Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
-	Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
+	// Get transforms. The collision runs in shape 1's local space, so the relative transform's
+	// rotation (Mat44) and translation (Vec4) drive the local-space support functions.
+	RMat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
+	RMat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
+	Mat44 rotation_2_to_1 = transform_2_to_1.GetRotation();
+	Vec4 translation_2_to_1 = sNarrow(transform_2_to_1.GetTranslation());
 
 	// Get bounding boxes
 	float max_separation_distance = inCollideShapeSettings.mMaxSeparationDistance;
 	AABox shape1_bbox = shape1->GetLocalBounds().Scaled(inScale1);
-	shape1_bbox.ExpandBy(Vec3::sReplicate(max_separation_distance));
+	shape1_bbox.ExpandBy(Vec4::sReplicate(max_separation_distance));
 	AABox shape2_bbox = shape2->GetLocalBounds().Scaled(inScale2);
 
 	// Check if they overlap
-	if (!OrientedBox(transform_2_to_1, shape2_bbox).Overlaps(shape1_bbox))
+	if (!OrientedBox(rotation_2_to_1, translation_2_to_1, shape2_bbox).Overlaps(shape1_bbox))
 		return;
 
 	// Note: As we don't remember the penetration axis from the last iteration, and it is likely that shape2 is pushed out of
 	// collision relative to shape1 by comparing their COM's, we use that as an initial penetration axis: shape2.com - shape1.com
 	// This has been seen to improve performance by approx. 1% over using a fixed axis like (1, 0, 0).
-	Vec3 penetration_axis = transform_2_to_1.GetTranslation();
+	Vec4 penetration_axis = translation_2_to_1;
 
 	// Ensure that we do not pass in a near zero penetration axis
 	if (penetration_axis.IsNearZero())
-		penetration_axis = Vec3::sAxisX();
+		penetration_axis = Vec4::sAxisX();
 
-	Vec3 point1, point2;
+	Vec4 point1, point2;
 	EPAPenetrationDepth pen_depth;
 	EPAPenetrationDepth::EStatus status;
 
@@ -87,7 +86,7 @@ void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inS
 		const Support *shape2_excl_cvx_radius = shape2->GetSupportFunction(ConvexShape::ESupportMode::ExcludeConvexRadius, buffer2_excl_cvx_radius, inScale2);
 
 		// Transform shape 2 in the space of shape 1
-		TransformedConvexObject transformed2_excl_cvx_radius(transform_2_to_1, *shape2_excl_cvx_radius);
+		TransformedConvexObject transformed2_excl_cvx_radius(rotation_2_to_1, translation_2_to_1, *shape2_excl_cvx_radius);
 
 		// Perform GJK step
 		status = pen_depth.GetPenetrationDepthStepGJK(*shape1_excl_cvx_radius, shape1_excl_cvx_radius->GetConvexRadius() + max_separation_distance, transformed2_excl_cvx_radius, shape2_excl_cvx_radius->GetConvexRadius(), inCollideShapeSettings.mCollisionTolerance, penetration_axis, point1, point2);
@@ -121,7 +120,7 @@ void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inS
 			AddConvexRadius shape1_add_max_separation_distance(*shape1_incl_cvx_radius, max_separation_distance);
 
 			// Transform shape 2 in the space of shape 1
-			TransformedConvexObject transformed2_incl_cvx_radius(transform_2_to_1, *shape2_incl_cvx_radius);
+			TransformedConvexObject transformed2_incl_cvx_radius(rotation_2_to_1, translation_2_to_1, *shape2_incl_cvx_radius);
 
 			// Perform EPA step
 			if (!pen_depth.GetPenetrationDepthStepEPA(shape1_add_max_separation_distance, transformed2_incl_cvx_radius, inCollideShapeSettings.mPenetrationTolerance, penetration_axis, point1, point2))
@@ -141,12 +140,12 @@ void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inS
 		point1 -= penetration_axis * (max_separation_distance / penetration_axis_len);
 
 	// Convert to world space
-	point1 = inCenterOfMassTransform1 * point1;
-	point2 = inCenterOfMassTransform1 * point2;
-	Vec3 penetration_axis_world = inCenterOfMassTransform1.Multiply3x3(penetration_axis);
+	Vec4 point1_world = sNarrow(inCenterOfMassTransform1 * point1);
+	Vec4 point2_world = sNarrow(inCenterOfMassTransform1 * point2);
+	Vec4 penetration_axis_world = inCenterOfMassTransform1.Multiply3x3(penetration_axis);
 
 	// Create collision result
-	CollideShapeResult result(point1, point2, penetration_axis_world, penetration_depth, inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(), TransformedShape::sGetBodyID(ioCollector.GetContext()));
+	CollideShapeResult result(point1_world, point2_world, penetration_axis_world, penetration_depth, inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(), TransformedShape::sGetBodyID(ioCollector.GetContext()));
 
 	// Gather faces
 	if (inCollideShapeSettings.mCollectFacesMode == ECollectFacesMode::CollectFaces)
@@ -154,8 +153,8 @@ void ConvexShape::sCollideConvexVsConvex(const Shape *inShape1, const Shape *inS
 		// Get supporting face of shape 1
 		shape1->GetSupportingFace(SubShapeID(), -penetration_axis, inScale1, inCenterOfMassTransform1, result.mShape1Face);
 
-		// Get supporting face of shape 2
-		shape2->GetSupportingFace(SubShapeID(), transform_2_to_1.Multiply3x3Transposed(penetration_axis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
+		// Get supporting face of shape 2 (transform the axis into shape 2's local frame: R^T * axis)
+		shape2->GetSupportingFace(SubShapeID(), Vec4(rotation_2_to_1.Transposed() * Lane4(penetration_axis)), inScale2, inCenterOfMassTransform2, result.mShape2Face);
 	}
 
 	// Notify the collector
@@ -171,7 +170,7 @@ bool ConvexShape::CastRay(const RayCast &inRay, const SubShapeIDCreator &inSubSh
 
 	// Create support function
 	SupportBuffer buffer;
-	const Support *support = GetSupportFunction(ConvexShape::ESupportMode::IncludeConvexRadius, buffer, Vec3::sOne());
+	const Support *support = GetSupportFunction(ConvexShape::ESupportMode::IncludeConvexRadius, buffer, Vec4::sOne());
 
 	// Cast ray
 	GJKClosestPoint gjk;
@@ -230,7 +229,7 @@ void ConvexShape::CastRay(const RayCast &inRay, const RayCastSettings &inRayCast
 	}
 }
 
-void ConvexShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter) const
+void ConvexShape::CollidePoint(Vec4Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter) const
 {
 	// Test shape filter
 	if (!inShapeFilter.ShouldCollide(this, inSubShapeIDCreator.GetID()))
@@ -241,210 +240,58 @@ void ConvexShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubSh
 	{
 		// Create support function
 		SupportBuffer buffer;
-		const Support *support = GetSupportFunction(ConvexShape::ESupportMode::IncludeConvexRadius, buffer, Vec3::sOne());
+		const Support *support = GetSupportFunction(ConvexShape::ESupportMode::IncludeConvexRadius, buffer, Vec4::sOne());
 
 		// Create support function for point
 		PointConvexSupport point { inPoint };
 
 		// Test intersection
 		GJKClosestPoint gjk;
-		Vec3 v = inPoint;
+		Vec4 v = inPoint;
 		if (gjk.Intersects(*support, point, cDefaultCollisionTolerance, v))
 			ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
 	}
 }
 
-void ConvexShape::sCastConvexVsConvex(const ShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, const Shape *inShape, Vec3Arg inScale, [[maybe_unused]] const ShapeFilter &inShapeFilter, Mat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, CastShapeCollector &ioCollector)
+void ConvexShape::sCastConvexVsConvex(const ShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, const Shape *inShape, Vec4Arg inScale, [[maybe_unused]] const ShapeFilter &inShapeFilter, RMat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, CastShapeCollector &ioCollector)
 {
-	JPH_PROFILE_FUNCTION();
-
-	// Only supported for convex shapes
-	JPH_ASSERT(inShapeCast.mShape->GetType() == EShapeType::Convex);
-	const ConvexShape *cast_shape = static_cast<const ConvexShape *>(inShapeCast.mShape);
-
-	JPH_ASSERT(inShape->GetType() == EShapeType::Convex);
-	const ConvexShape *shape = static_cast<const ConvexShape *>(inShape);
-
-	// Determine if we want to use the actual shape or a shrunken shape with convex radius
-	ConvexShape::ESupportMode support_mode = inShapeCastSettings.mUseShrunkenShapeAndConvexRadius? ConvexShape::ESupportMode::ExcludeConvexRadius : ConvexShape::ESupportMode::Default;
-
-	// Create support function for shape to cast
-	SupportBuffer cast_buffer;
-	const Support *cast_support = cast_shape->GetSupportFunction(support_mode, cast_buffer, inShapeCast.mScale);
-
-	// Create support function for target shape
-	SupportBuffer target_buffer;
-	const Support *target_support = shape->GetSupportFunction(support_mode, target_buffer, inScale);
-
-	// Do a raycast against the result
-	EPAPenetrationDepth epa;
-	float fraction = ioCollector.GetEarlyOutFraction();
-	Vec3 contact_point_a, contact_point_b, contact_normal;
-	if (epa.CastShape(inShapeCast.mCenterOfMassStart, inShapeCast.mDirection, inShapeCastSettings.mCollisionTolerance, inShapeCastSettings.mPenetrationTolerance, *cast_support, *target_support, cast_support->GetConvexRadius(), target_support->GetConvexRadius(), inShapeCastSettings.mReturnDeepestPoint, fraction, contact_point_a, contact_point_b, contact_normal)
-		&& (inShapeCastSettings.mBackFaceModeConvex == EBackFaceMode::CollideWithBackFaces
-			|| contact_normal.Dot(inShapeCast.mDirection) > 0.0f)) // Test if backfacing
-	{
-		// Convert to world space
-		contact_point_a = inCenterOfMassTransform2 * contact_point_a;
-		contact_point_b = inCenterOfMassTransform2 * contact_point_b;
-		Vec3 contact_normal_world = inCenterOfMassTransform2.Multiply3x3(contact_normal);
-
-		ShapeCastResult result(fraction, contact_point_a, contact_point_b, contact_normal_world, false, inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(), TransformedShape::sGetBodyID(ioCollector.GetContext()));
-
-		// Early out if this hit is deeper than the collector's early out value
-		if (fraction == 0.0f && -result.mPenetrationDepth >= ioCollector.GetEarlyOutFraction())
-			return;
-
-		// Gather faces
-		if (inShapeCastSettings.mCollectFacesMode == ECollectFacesMode::CollectFaces)
-		{
-			// Get supporting face of shape 1
-			Mat44 transform_1_to_2 = inShapeCast.mCenterOfMassStart;
-			transform_1_to_2.SetTranslation(transform_1_to_2.GetTranslation() + fraction * inShapeCast.mDirection);
-			cast_shape->GetSupportingFace(SubShapeID(), transform_1_to_2.Multiply3x3Transposed(-contact_normal), inShapeCast.mScale, inCenterOfMassTransform2 * transform_1_to_2, result.mShape1Face);
-
-			// Get supporting face of shape 2
-			shape->GetSupportingFace(SubShapeID(), contact_normal, inScale, inCenterOfMassTransform2, result.mShape2Face);
-		}
-
-		JPH_IF_TRACK_NARROWPHASE_STATS(TrackNarrowPhaseCollector track;)
-		ioCollector.AddHit(result);
-	}
+	// TODO(4D): the convex shape cast needs the geometry GJK/EPA CastShape to carry the start
+	// translation. Currently GJKClosestPoint::CastShape takes a pure-rotation Mat44 start and
+	// constructs TransformedConvexObject(inStart, Vec4::sZero(), ...), so the cast start position is
+	// dropped. Stubbed until that geometry fix lands; the collide path (sCollideConvexVsConvex) and
+	// per-shape CastRay are functional.
+	(void)inShapeCast; (void)inShapeCastSettings; (void)inShape; (void)inScale;
+	(void)inCenterOfMassTransform2; (void)inSubShapeIDCreator1; (void)inSubShapeIDCreator2; (void)ioCollector;
 }
 
-class ConvexShape::CSGetTrianglesContext
+void ConvexShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale) const
 {
-public:
-				CSGetTrianglesContext(const ConvexShape *inShape, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) :
-		mLocalToWorld(Mat44::sRotationTranslation(inRotation, inPositionCOM) * Mat44::sScale(inScale)),
-		mIsInsideOut(ScaleHelpers::IsInsideOut(inScale))
-	{
-		mSupport = inShape->GetSupportFunction(ESupportMode::IncludeConvexRadius, mSupportBuffer, Vec3::sOne());
-	}
-
-	SupportBuffer		mSupportBuffer;
-	const Support *		mSupport;
-	Mat44				mLocalToWorld;
-	bool				mIsInsideOut;
-	size_t				mCurrentVertex = 0;
-};
-
-void ConvexShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const
-{
-	static_assert(sizeof(CSGetTrianglesContext) <= sizeof(GetTrianglesContext), "GetTrianglesContext too small");
-	JPH_ASSERT(IsAligned(&ioContext, alignof(CSGetTrianglesContext)));
-
-	new (&ioContext) CSGetTrianglesContext(this, inPositionCOM, inRotation, inScale);
+	// TODO(4D): the convex boundary tessellation returned sUnitSphereTriangles (a 3D triangle
+	// mesh) via GetTrianglesContextVertexList. In 4D the boundary is a 3-manifold tessellated by
+	// tetrahedra; the GetTrianglesContext pipeline still assumes triangles. Stubbed until that is
+	// defined.
+	(void)ioContext; (void)inBox; (void)inPositionCOM; (void)inRotation; (void)inScale;
 }
 
-int ConvexShape::GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float3 *outTriangleVertices, const PhysicsMaterial **outMaterials) const
+int ConvexShape::GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float4 *outTriangleVertices, const PhysicsMaterial **outMaterials) const
 {
-	JPH_ASSERT(inMaxTrianglesRequested >= cGetTrianglesMinTrianglesRequested);
-
-	CSGetTrianglesContext &context = (CSGetTrianglesContext &)ioContext;
-
-	int total_num_vertices = min(inMaxTrianglesRequested * 3, int(sUnitSphereTriangles.size() - context.mCurrentVertex));
-
-	if (context.mIsInsideOut)
-	{
-		// Store triangles flipped
-		for (const Vec3 *v = sUnitSphereTriangles.data() + context.mCurrentVertex, *v_end = v + total_num_vertices; v < v_end; v += 3)
-		{
-			(context.mLocalToWorld * context.mSupport->GetSupport(v[0])).StoreFloat3(outTriangleVertices++);
-			(context.mLocalToWorld * context.mSupport->GetSupport(v[2])).StoreFloat3(outTriangleVertices++);
-			(context.mLocalToWorld * context.mSupport->GetSupport(v[1])).StoreFloat3(outTriangleVertices++);
-		}
-	}
-	else
-	{
-		// Store triangles
-		for (const Vec3 *v = sUnitSphereTriangles.data() + context.mCurrentVertex, *v_end = v + total_num_vertices; v < v_end; v += 3)
-		{
-			(context.mLocalToWorld * context.mSupport->GetSupport(v[0])).StoreFloat3(outTriangleVertices++);
-			(context.mLocalToWorld * context.mSupport->GetSupport(v[1])).StoreFloat3(outTriangleVertices++);
-			(context.mLocalToWorld * context.mSupport->GetSupport(v[2])).StoreFloat3(outTriangleVertices++);
-		}
-	}
-
-	context.mCurrentVertex += total_num_vertices;
-	int total_num_triangles = total_num_vertices / 3;
-
-	// Store materials
-	if (outMaterials != nullptr)
-	{
-		const PhysicsMaterial *material = GetMaterial();
-		for (const PhysicsMaterial **m = outMaterials, **m_end = outMaterials + total_num_triangles; m < m_end; ++m)
-			*m = material;
-	}
-
-	return total_num_triangles;
+	// TODO(4D): see GetTrianglesStart.
+	(void)ioContext; (void)inMaxTrianglesRequested; (void)outTriangleVertices; (void)outMaterials;
+	return 0;
 }
 
-void ConvexShape::GetSubmergedVolume(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec3 &outCenterOfBuoyancy JPH_IF_DEBUG_RENDERER(, RVec3Arg inBaseOffset)) const
+void ConvexShape::GetSubmergedVolume(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec4 &outCenterOfBuoyancy, [[maybe_unused]] RVec4Arg inBaseOffset) const
 {
-	// Calculate total volume
-	Vec3 abs_scale = inScale.Abs();
-	Vec3 extent = GetLocalBounds().GetExtent() * abs_scale;
-	outTotalVolume = 8.0f * extent.GetX() * extent.GetY() * extent.GetZ();
+	// 4D hypervolume of the bounding box (2*extent per axis)
+	Vec4 extent = GetLocalBounds().GetExtent() * inScale.Abs();
+	outTotalVolume = 16.0f * extent.GetX() * extent.GetY() * extent.GetZ() * extent.GetW();
 
-	// Points of the bounding box
-	Vec3 points[] =
-	{
-		Vec3(-1, -1, -1),
-		Vec3( 1, -1, -1),
-		Vec3(-1,  1, -1),
-		Vec3( 1,  1, -1),
-		Vec3(-1, -1,  1),
-		Vec3( 1, -1,  1),
-		Vec3(-1,  1,  1),
-		Vec3( 1,  1,  1),
-	};
-
-	// Faces of the bounding box
-	using Face = int[5];
-	#define MAKE_FACE(a, b, c, d) { a, b, c, d, ((1 << a) | (1 << b) | (1 << c) | (1 << d)) } // Last int is a bit mask that indicates which indices are used
-	Face faces[] =
-	{
-		MAKE_FACE(0, 2, 3, 1),
-		MAKE_FACE(4, 6, 2, 0),
-		MAKE_FACE(4, 5, 7, 6),
-		MAKE_FACE(1, 3, 7, 5),
-		MAKE_FACE(2, 6, 7, 3),
-		MAKE_FACE(0, 1, 5, 4),
-	};
-
-	PolyhedronSubmergedVolumeCalculator::Point *buffer = (PolyhedronSubmergedVolumeCalculator::Point *)JPH_STACK_ALLOC(8 * sizeof(PolyhedronSubmergedVolumeCalculator::Point));
-	PolyhedronSubmergedVolumeCalculator submerged_vol_calc(inCenterOfMassTransform * Mat44::sScale(extent), points, sizeof(Vec3), 8, inSurface, buffer JPH_IF_DEBUG_RENDERER(, inBaseOffset));
-
-	if (submerged_vol_calc.AreAllAbove())
-	{
-		// We're above the water
-		outSubmergedVolume = 0.0f;
-		outCenterOfBuoyancy = Vec3::sZero();
-	}
-	else if (submerged_vol_calc.AreAllBelow())
-	{
-		// We're fully submerged
-		outSubmergedVolume = outTotalVolume;
-		outCenterOfBuoyancy = inCenterOfMassTransform.GetTranslation();
-	}
-	else
-	{
-		// Calculate submerged volume
-		int reference_point_bit = 1 << submerged_vol_calc.GetReferencePointIdx();
-		for (const Face &f : faces)
-		{
-			// Test if this face includes the reference point
-			if ((f[4] & reference_point_bit) == 0)
-			{
-				// Triangulate the face (a quad)
-				submerged_vol_calc.AddFace(f[0], f[1], f[2]);
-				submerged_vol_calc.AddFace(f[0], f[2], f[3]);
-			}
-		}
-
-		submerged_vol_calc.GetResult(outSubmergedVolume, outCenterOfBuoyancy);
-	}
+	// TODO(4D): the submerged-hypervolume of a convex 4-polytope cut by a hyperplane needs a 4D
+	// polyhedron clip (PolyhedronSubmergedVolumeCalculator is the 3D box version). Approximate for
+	// now with the fully-above / fully-below cases and leave the intersecting case at zero.
+	(void)inSurface;
+	outSubmergedVolume = 0.0f;
+	outCenterOfBuoyancy = sNarrow(inCenterOfMassTransform.GetTranslation());
 }
 
 #ifdef JPH_DEBUG_RENDERER

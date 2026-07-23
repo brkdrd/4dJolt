@@ -53,16 +53,16 @@ public:
 	virtual void					CastRay(const RayCast &inRay, const RayCastSettings &inRayCastSettings, const SubShapeIDCreator &inSubShapeIDCreator, CastRayCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
 
 	// See: Shape::CollidePoint
-	virtual void					CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
+	virtual void					CollidePoint(Vec4Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
 
 	// See Shape::GetTrianglesStart
-	virtual void					GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const override;
+	virtual void					GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale) const override;
 
 	// See Shape::GetTrianglesNext
-	virtual int						GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float3 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const override;
+	virtual int						GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float4 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const override;
 
 	// See Shape::GetSubmergedVolume
-	virtual void					GetSubmergedVolume(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec3 &outCenterOfBuoyancy JPH_IF_DEBUG_RENDERER(, RVec3Arg inBaseOffset)) const override;
+	virtual void					GetSubmergedVolume(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec4 &outCenterOfBuoyancy, RVec4Arg inBaseOffset) const override;
 
 	/// Function that provides an interface for GJK
 	class Support
@@ -73,7 +73,7 @@ public:
 
 		/// Calculate the support vector for this convex shape (includes / excludes the convex radius depending on how this was obtained).
 		/// Support vector is relative to the center of mass of the shape.
-		virtual Vec3				GetSupport(Vec3Arg inDirection) const = 0;
+		virtual Vec4				GetSupport(Vec4Arg inDirection) const = 0;
 
 		/// Convex radius of shape. Collision detection on penetrating shapes is much more expensive,
 		/// so you can add a radius around objects to increase the shape. This makes it far less likely that they will actually penetrate.
@@ -99,7 +99,7 @@ public:
 	/// inMode determines if this support function includes or excludes the convex radius.
 	/// of the values returned by the GetSupport function. This improves numerical accuracy of the results.
 	/// inScale scales this shape in local space.
-	virtual const Support *			GetSupportFunction(ESupportMode inMode, SupportBuffer &inBuffer, Vec3Arg inScale) const = 0;
+	virtual const Support *			GetSupportFunction(ESupportMode inMode, SupportBuffer &inBuffer, Vec4Arg inScale) const = 0;
 
 	/// Material of the shape
 	void							SetMaterial(const PhysicsMaterial *inMaterial)				{ mMaterial = inMaterial; }
@@ -113,10 +113,10 @@ public:
 
 #ifdef JPH_DEBUG_RENDERER
 	// See Shape::DrawGetSupportFunction
-	virtual void					DrawGetSupportFunction(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec3Arg inScale, ColorArg inColor, bool inDrawSupportDirection) const override;
+	virtual void					DrawGetSupportFunction(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, ColorArg inColor, bool inDrawSupportDirection) const override;
 
 	// See Shape::DrawGetSupportingFace
-	virtual void					DrawGetSupportingFace(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec3Arg inScale) const override;
+	virtual void					DrawGetSupportingFace(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec4Arg inScale) const override;
 #endif // JPH_DEBUG_RENDERER
 
 	// See Shape
@@ -131,16 +131,14 @@ protected:
 	// See: Shape::RestoreBinaryState
 	virtual void					RestoreBinaryState(StreamIn &inStream) override;
 
-	/// Vertex list that forms a unit sphere
-	static const StaticArray<Vec3, 384> sUnitSphereTriangles;
-
 private:
-	// Class for GetTrianglesStart/Next
-	class							CSGetTrianglesContext;
+	// TODO(4D): GetTrianglesStart/Next are stubbed. The 3D unit-2-sphere tessellation
+	// (sUnitSphereTriangles) and its CSGetTrianglesContext were removed; 4D needs an S^3
+	// tessellation by tetrahedra, which the triangle-based GetTrianglesContext cannot represent.
 
 	// Helper functions called by CollisionDispatch
-	static void						sCollideConvexVsConvex(const Shape *inShape1, const Shape *inShape2, Vec3Arg inScale1, Vec3Arg inScale2, Mat44Arg inCenterOfMassTransform1, Mat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, const CollideShapeSettings &inCollideShapeSettings, CollideShapeCollector &ioCollector, const ShapeFilter &inShapeFilter);
-	static void						sCastConvexVsConvex(const ShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, const Shape *inShape, Vec3Arg inScale, const ShapeFilter &inShapeFilter, Mat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, CastShapeCollector &ioCollector);
+	static void						sCollideConvexVsConvex(const Shape *inShape1, const Shape *inShape2, Vec4Arg inScale1, Vec4Arg inScale2, RMat44Arg inCenterOfMassTransform1, RMat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, const CollideShapeSettings &inCollideShapeSettings, CollideShapeCollector &ioCollector, const ShapeFilter &inShapeFilter);
+	static void						sCastConvexVsConvex(const ShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, const Shape *inShape, Vec4Arg inScale, const ShapeFilter &inShapeFilter, RMat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, CastShapeCollector &ioCollector);
 
 	// Properties
 	RefConst<PhysicsMaterial>		mMaterial;													///< Material assigned to this shape
