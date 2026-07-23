@@ -104,6 +104,7 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Geometry/EPAConvexHullBuilder.h
 	${JOLT_PHYSICS_ROOT}/Geometry/EPAPenetrationDepth.h
 	${JOLT_PHYSICS_ROOT}/Geometry/GJKClosestPoint.h
+	${JOLT_PHYSICS_ROOT}/Geometry/IndexedTetrahedron.h
 	${JOLT_PHYSICS_ROOT}/Geometry/IndexedTriangle.h
 	${JOLT_PHYSICS_ROOT}/Geometry/Indexify.cpp
 	${JOLT_PHYSICS_ROOT}/Geometry/Indexify.h
@@ -115,13 +116,16 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Geometry/RayCapsule.h
 	${JOLT_PHYSICS_ROOT}/Geometry/RayCylinder.h
 	${JOLT_PHYSICS_ROOT}/Geometry/RaySphere.h
+	${JOLT_PHYSICS_ROOT}/Geometry/RayTetrahedron.h
 	${JOLT_PHYSICS_ROOT}/Geometry/RayTriangle.h
 	${JOLT_PHYSICS_ROOT}/Geometry/Sphere.h
+	${JOLT_PHYSICS_ROOT}/Geometry/Tetrahedron.h
 	${JOLT_PHYSICS_ROOT}/Geometry/Triangle.h
 	${JOLT_PHYSICS_ROOT}/Jolt.cmake
 	${JOLT_PHYSICS_ROOT}/Jolt.h
 	${JOLT_PHYSICS_ROOT}/Math/BVec16.h
 	${JOLT_PHYSICS_ROOT}/Math/BVec16.inl
+	${JOLT_PHYSICS_ROOT}/Math/Bivec.h
 	${JOLT_PHYSICS_ROOT}/Math/Double3.h
 	${JOLT_PHYSICS_ROOT}/Math/Double4.h
 	${JOLT_PHYSICS_ROOT}/Math/DVec4.h
@@ -137,6 +141,7 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Math/HalfFloat.h
 	${JOLT_PHYSICS_ROOT}/Math/Mat44.h
 	${JOLT_PHYSICS_ROOT}/Math/Mat44.inl
+	${JOLT_PHYSICS_ROOT}/Math/RMat44.h
 	${JOLT_PHYSICS_ROOT}/Math/Lane4.h
 	${JOLT_PHYSICS_ROOT}/Math/Lane4.inl
 	${JOLT_PHYSICS_ROOT}/Math/Math.h
