@@ -22,14 +22,14 @@ cmake --build build -j$(nproc)                        # currently FAILS, see sta
 ./build/UnitTests                                     # binary in repo is STALE (pre-4D tests) — do not trust it
 ```
 
-**Current build status (verified 2026-07-22): broken, ~3,800 errors** with `make -k`.
-First failure: `Jolt/Geometry/AABox.h:223` uses `RMat44` methods with only a forward
-declaration in scope (`RMat44.h` is never included there). Error census by area:
-ConstraintPart headers (~1,100), DebugRenderer (~260), Shape hierarchy (~700), AABox/RMat44
-incompleteness (~420), SoftBody/Character/Hair/PhysicsSystem (~200). Dominant error classes:
+**Current build status (verified 2026-07-22): broken, ~3,400 errors** with `make -k` (down
+from ~3,800 after the AABox include fix, Phase A step 4). The trivial first-blocker cascade is
+gone; every remaining error is in an un-migrated layer, so the counts are now meaningful.
+Error census by area: ConstraintPart headers (~840, the largest), DebugRenderer (~260), Shape
+hierarchy (~700), SoftBody/Character/Hair/PhysicsSystem (~200). Dominant error classes:
 `Vec3 ↔ Bivec` conversions, `Body::GetInverseInertia` removed, `Mat44::Multiply3x3` removed,
 `RVec4 → RVec3` conversions. i.e. the un-migrated layers no longer compile against the
-migrated Body/Math API.
+migrated Body/Math API. This is Phase B work.
 
 ## The 4D type system (established, do not re-litigate)
 
@@ -67,11 +67,13 @@ and logarithm, rotor normalization (normalize each SU(2) factor), and SLERP.
 
 ## Current state by module
 
-### Math (`Jolt/Math/`) — scaffolding done, dynamics core has real bugs, zero tests
-Lane4/Vec4/Vec8/Mat44/RMat44/Float8/Double4 are solid. `Mat44::GetRotor` (Shepperd via
-SU(2)×SU(2)) is careful and correct. Rotor/Bivec are implemented but **entirely scalar** (no
-SIMD on any ISA); Vec8 has SSE/AVX/NEON but no RVV. `Bivec.h` and `RMat44.h` are untracked in
-git and `Bivec.h` is not listed in `Jolt.cmake`.
+### Math (`Jolt/Math/`) — scaffolding solid, dynamics core now fixed & tested
+Lane4/Vec4/Vec8/Mat44/RMat44/Float8/Double4 are solid. The Cl(4,0) rotor core is now correct
+and covered by the reference-validated suite (37/37): the SU(2)×SU(2) split drives
+`Rotor::Normalized`/`IsNormalized` (defect-aware), `Rotor::sExp`/`Log` (general 4D exp/log),
+and `Mat44::GetRotor` (the anti-self-dual sign bug is fixed). Rotor/Bivec are still **entirely
+scalar** (no SIMD on any ISA — a v1.1 perf item, not a correctness one); Vec8 has SSE/AVX/NEON
+but no RVV. `Bivec.h`/`RMat44.h` are now tracked and registered in `Jolt.cmake`.
 
 ### Geometry (`Jolt/Geometry/`) — the strongest part of the project
 Verified as a genuine, careful 4D generalization (not a rename): ClosestPoint (Gram-matrix
@@ -113,10 +115,11 @@ The Clifford-algebra core now has a reference-validated test-first suite (added 
 `UnitTests/Math/RotorTests.cpp`, `BivecTests.cpp`, `Vec8Tests.cpp`, `RMat44Tests.cpp`, all
 checked against a brute-force Cl(4,0) implementation in `UnitTests/Math/Cl4Reference.h` (16-blade
 multivectors, geometric product from first principles). These are registered in
-`UnitTests/UnitTests.cmake`. 29 cases pass; 7 fail by design — each is a `// EXPECTED TO FAIL
-until … bug #N is fixed` case pinning an unfixed P0/P1 bug (defect normalization #2, GetRotor
-sign #8, sAnd aliasing #10). Writing them already caught a bug the read-only audit missed
-(GetRotor, #8). **Do not weaken an EXPECTED-TO-FAIL test to go green — fix the code.**
+`UnitTests/UnitTests.cmake`. **All 37 cases now pass (1564 assertions).** Writing them caught a
+bug the read-only audit missed and had praised (GetRotor, #8); the P0/P1 math bugs they pinned
+(#1 exp/log, #2 defect normalization, #8 GetRotor, #10 sAnd aliasing) are now all fixed and the
+former EXPECTED-TO-FAIL cases are green regression tests. **Do not weaken a test to go green —
+fix the code.**
 
 Running them: the full `UnitTests` target cannot link yet (the physics library doesn't build),
 so the suite is verified via a standalone runner that compiles just the header-only Math tests
@@ -140,17 +143,21 @@ tests yet (Phase C).
 
 ## Verified bugs (fix before building anything on top)
 
+**Fixed 2026-07-22 (this pass, all validated by the Math test suite): #1, #2, #8, #10, and the
+Body.inl half of #9; plus the build blocker and repo hygiene (#12, mostly).** Still open:
+#3, #4, #5, #6, #7, #11, and the `Mat44::sRotationXY..` half of #9.
+
 P0 — correctness of core dynamics/geometry:
-1. **Rotor exponential only handles simple rotations.** `Body::AddRotationStep`/`SubRotationStep`
-   (`Body.inl:63-120`) use `exp(B) = cos|B| + sin|B|·B/|B|` and hard-code pseudoscalar = 0.
-   Wrong for any double/isoclinic rotation (generic 4D tumbling). Fix via the self-dual split
-   (above), implement once as `Rotor::sExp(BivecArg)` / `Rotor::Log()`, delete the duplicated
-   inline code.
-2. **Rotor normalization ignores the e1234 defect.** `Normalized()`/`IsNormalized()`
-   (`Rotor.h:125`) only normalize the 8-vector length; `R·R̃ = a + b·e1234` needs b = 0 too.
-   Drift makes the sandwich product silently drop a growing grade-3 remainder (`Rotor.inl:68-96`).
-   `LERP` (`Rotor.inl:118`) doesn't even normalize length. Fix: renormalize via the two SU(2)
-   factors; add a defect assert in `IsNormalized`.
+1. **[FIXED]** ~~Rotor exponential only handles simple rotations.~~ `Rotor::sExp(BivecArg)` /
+   `Rotor::Log()` now implement the general 4D exp/log via the SU(2)×SU(2) split
+   (`Rotor.inl`), and `Body::AddRotationStep`/`SubRotationStep` call `sExp` instead of the old
+   inline single-plane formula. Validated against the brute-force reference for random double
+   rotations (`TestRotorExpLog`).
+2. **[FIXED]** ~~Rotor normalization ignores the e1234 defect.~~ `Normalized()`/`IsNormalized()`
+   now project onto Spin(4) by normalizing each SU(2) quaternion factor (removes the e1234
+   defect), and `LERP` normalizes its result (`Rotor.inl`). Tracked by
+   `TestRotorIsNormalizedDetectsDefect` / `TestRotorNormalizedRemovesDefect` /
+   `TestRotorLERPReturnsValidRotor`.
 3. **`MotionProperties::MultiplyWorldSpaceInverseInertiaByVector` is a stub**
    (`MotionProperties.inl:61-110`): computes the world→body rotor then discards it
    (`(void)combined`), applying the diagonal inertia as if the body were axis-aligned. Every
@@ -171,32 +178,28 @@ P0 — correctness of core dynamics/geometry:
 7. **EPA degenerate cell**: `EPAConvexHullBuilder.h:668-713` can leave `mNormal`/`mLambda`
    uninitialized on a degenerate tetrahedron yet still link the cell; later `IsFacing` reads
    garbage.
-8. **`Mat44::GetRotor` recovers the wrong sign for the e23/e24/e34 (and e1234) components**
-   (`Mat44.inl:673`). Discovered by the new RotorTests suite and verified plane-by-plane: a
-   coordinate-plane rotation round-trips correctly in the e12/e13/e14 planes but `GetRotor`
-   returns the *opposite* rotation in the e23/e24/e34 planes, so `sRotation(GetRotor(M)) != M`
-   for essentially every rotation not confined to an e1-containing 2-plane (all general-plane
-   simple rotations, all double rotations). Equivalently it negates the anti-self-dual SU(2)
-   factor. The earlier read-only audit *praised* `GetRotor`; that was wrong — it is only correct
-   on the e1-plane subset. `GetRotor` feeds `RMat44::GetRotor`, `Decompose`, and any
-   matrix→rotor conversion, so this silently corrupts rotations recovered from matrices.
-   Tracked by `TestRotorMatrixRoundTrip` / `TestRMat44GetRotor`.
+8. **[FIXED]** ~~`Mat44::GetRotor` recovers the wrong sign for the e23/e24/e34 (and e1234)
+   components.~~ Its internal `(qL,qR)` were labeled mirror to the rotor's SU(2) convention, so
+   Step 5 negated the anti-self-dual components; the fix applies the qL↔qR swap (`Mat44.inl`
+   GetRotor). Discovered by the new suite (the earlier read-only audit had *praised* GetRotor).
+   `sRotation(GetRotor(M)) == M` now holds for simple, double and generic rotors —
+   `TestRotorMatrixRoundTrip` / `TestRMat44GetRotor`.
 
 P1 — determinism / hygiene:
-9. `Mat44::sRotationXY/XZ/XW/YZ/YW/ZW` (`Mat44.inl:123-168`) and `Body.inl:85,113` call C
-   library `sin/cos` instead of `JPH::Sin/Cos` — breaks Jolt's cross-platform determinism
-   guarantee (`Trigonometry.h:9` explains why). `Rotor.inl` does it right; make it uniform.
-10. `Bivec::sAnd` (`Bivec.h:115`) type-puns floats through `reinterpret_cast<uint32*>` —
-    strict-aliasing UB that **actually breaks at the project's -O3 -flto**: verified that `sAnd`
-    returns its first argument unmodified under strict aliasing and only works with
-    `-fno-strict-aliasing`. Use `memcpy` or Vec8 logic ops. Tracked by `TestBivecSAnd`.
+9. **[PARTIAL]** C-library `sin/cos` instead of `JPH::Sin/Cos` breaks Jolt's determinism
+   guarantee (`Trigonometry.h:9`). Fixed in the `Body.inl` rotation step (now routes through
+   `Rotor::sExp`, which uses `JPH::Sin/Cos`). **Still open:** `Mat44::sRotationXY/XZ/XW/YZ/YW/ZW`
+   (`Mat44.inl:123-168`) still call C-library `sin/cos`.
+10. **[FIXED]** ~~`Bivec::sAnd` type-puns floats through `reinterpret_cast<uint32*>`.~~ Now masks
+    per component via `memcpy` (`Bivec.h`). The prior version returned its first argument
+    unmodified at -O2/-O3 (strict-aliasing UB). Tracked by `TestBivecSAnd`.
 11. `Body::GetBodyCreationSettings` (`Body.cpp:383`) squeezes 6 bivector inertia moments into
     a diagonal Mat44 and drops the three W-plane moments — lossy round-trip.
-12. Repo hygiene: `build/` is committed (543 files incl. a 96 MB `libJolt.a`) — remove from
-    git and add `.gitignore`; `Bivec.h`, `RMat44.h`, `Tetrahedron.h`, `IndexedTetrahedron.h`,
-    `RayTetrahedron.h`, new test files are untracked; `Bivec.h` missing from `Jolt.cmake`;
-    the entire Geometry/Physics/ObjectStream migration is uncommitted. Commit in reviewable
-    slices.
+12. **[MOSTLY FIXED]** Repo hygiene: `build/` de-committed + `/build/` added to `.gitignore`;
+    `Bivec.h`/`RMat44.h`/`Tetrahedron.h`/`IndexedTetrahedron.h`/`RayTetrahedron.h` + new test
+    files now tracked; `Bivec.h` registered in `Jolt.cmake`. **Still open:** the bulk of the
+    Geometry/Physics/ObjectStream migration is still uncommitted working-tree changes — commit
+    in reviewable slices.
 
 ## Things that do NOT trivially generalize (the real design work left)
 
@@ -241,25 +244,22 @@ Definition of "shipped v1": headless library builds warning-clean; UnitTests all
 onto a hyperplane floor, stacks of tesseracts stable, spheres bouncing) runs deterministically;
 PerformanceTest runs on a 4D scene.
 
-**Phase A — stabilize the foundation (do first, in this order):**
-1. Repo hygiene (bug 11): de-commit `build/`, add `.gitignore`, `git add` the untracked
-   sources, register `Bivec.h`/`RMat44.h` in `Jolt.cmake`, commit the working tree as
-   reviewable commits on `4d`.
-2. DONE (2026-07-22): reference-validated algebra tests written test-first — RotorTests
-   (basis product table + random product vs brute-force Cl(4,0); sandwich vs reference; sRotation
-   geometry; matrix round-trip; exp/log guarded behind `JPH_ROTOR_HAS_EXP_LOG` for the fix),
-   BivecTests (wedge, contraction-as-rotation-generator, self-dual split reference), Vec8Tests,
-   RMat44Tests, plus `Cl4Reference.h`. Registered in `UnitTests.cmake`; `DMat44Tests`
-   de-registered. Still TODO here: rewrite `Mat44Tests` for the new API and delete/rewrite
-   `Vec3Tests`/`QuatTests` (with the legacy types), add a dedicated Lane4 suite. The 7 failing
-   cases are the EXPECTED-TO-FAIL bug markers — see the Tests section.
-3. Fix P0 bugs 1–8 and P1 9–11 against those tests; each fix should flip its EXPECTED-TO-FAIL
-   case(s) to passing. For the exp/log fix (#1), also un-guard the `JPH_ROTOR_HAS_EXP_LOG` block
-   in RotorTests. Geometry bugs #4 (`Plane::sIntersectPlanes`) and #5 (`MortonCode`) still need
-   their own tests — #4 is already covered by the existing `TestPlaneIntersectPlanes`, #5 needs a
-   new MortonCode test (assert distinct codes / no bit collisions across all 4 axes).
-4. Fix the trivial build blocker (`AABox.h` missing `#include <Jolt/Math/RMat44.h>` or move
-   the two `Transformed(RMat44Arg)` bodies out of line) so error counts become meaningful.
+**Phase A — stabilize the foundation. Steps 1, 2, 4 DONE (2026-07-22); step 3 mostly done.**
+1. DONE: repo hygiene — `build/` de-committed + gitignored, untracked 4D leaf sources tracked,
+   `Bivec.h` registered in `Jolt.cmake`. Still open: commit the bulk migration in reviewable
+   slices (the working tree still has ~140 modified files).
+2. DONE: reference-validated algebra tests written test-first (RotorTests/BivecTests/Vec8Tests/
+   RMat44Tests + `Cl4Reference.h`), registered in `UnitTests.cmake`; `DMat44Tests` de-registered.
+   Still TODO here: rewrite `Mat44Tests` for the new API, delete/rewrite `Vec3Tests`/`QuatTests`
+   (with the legacy types), add a dedicated Lane4 suite.
+3. Math P0/P1 bugs fixed against those tests (all 37 cases green): #1 exp/log, #2 defect
+   normalization, #8 GetRotor, #10 sAnd, and the Body.inl half of #9. **Still open:** #3
+   (`MultiplyWorldSpaceInverseInertiaByVector` adjoint), #4 (`Plane::sIntersectPlanes` — covered
+   by existing `TestPlaneIntersectPlanes`), #5 (`MortonCode` — needs a new no-bit-collision test),
+   #6 (`DVec4` Z==W invariant), #7 (EPA degenerate cell), #11 (lossy inertia round-trip), and the
+   `Mat44::sRotationXY..` half of #9.
+4. DONE: build blocker fixed — `AABox.h` now includes `RMat44.h`; error count ~3,800 → ~3,400
+   and the remainder is all Phase B un-migrated-layer work.
 
 **Phase B — restore an end-to-end simulating core:**
 5. ObjectStream primitives for Rotor/Bivec; re-enable the excluded attributes; DeterminismLog
