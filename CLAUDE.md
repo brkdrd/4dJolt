@@ -22,10 +22,10 @@ cmake --build build -j$(nproc)                        # currently FAILS, see sta
 ./build/UnitTests                                     # binary in repo is STALE (pre-4D tests) — do not trust it
 ```
 
-**Current build status (verified 2026-07-22): broken, ~3,290 errors** with `make -k` (down
-from ~3,800: AABox include fix in Phase A, then the TransformedShape/Shape base fixes in Phase
-B step 6). The trivial first-blocker cascade is gone; every remaining error is in an un-migrated
-layer, so the counts are now meaningful.
+**Current build status (verified 2026-07-22): broken, ~3,270 errors** with `make -k` (down
+from ~3,800: AABox include fix in Phase A, then the TransformedShape/Shape base fixes and the
+BoxShape/SphereShape ports in Phase B step 6). The trivial first-blocker cascade is gone; every
+remaining error is in an un-migrated layer, so the counts are now meaningful.
 Error census by area: ConstraintPart headers (~840, the largest), DebugRenderer (~260), Shape
 hierarchy (~700), SoftBody/Character/Hair/PhysicsSystem (~200). Dominant error classes:
 `Vec3 ↔ Bivec` conversions, `Body::GetInverseInertia` removed, `Mat44::Multiply3x3` removed,
@@ -279,12 +279,21 @@ PerformanceTest runs on a 4D scene.
    Verified by `RotorBivecStreamTest`. Remaining nit: `DVec4` serialization still drops W (bug #6).
 6. Shape layer for the v1 shape set. IN PROGRESS (2026-07-22):
    - DONE: `BoxShape` → tesseract (mass properties, 4D support fn + cubic-cell supporting face,
-     4D ray cast), mirroring `SphereShape`. Two bugs fixed while porting: `AABox::GetSupportingFace`
-     sign (picked the wrong cell) and `TransformedShape::ToRotor` typo; `Shape::GetSubmergedVolume`
-     inBaseOffset made unconditional for renderer-off consistency.
-   - **Next / blocker:** the shape *base* layer (`Shape.cpp`, `ConvexShape.cpp`, `SphereShape.cpp`)
-     still has its own migration errors, so no shape TU links yet — do a base-layer cleanup pass
-     (with `JPH_DEBUG_RENDERER` off, the headless v1 target) before/alongside porting more shapes.
+     4D ray cast), mirroring `SphereShape`. Both convex *leaf* shapes now compile clean with the
+     renderer off (drop the 3D `GetTrianglesContext.h` include, stub GetTriangles/Draw/SoftBody,
+     build diagonal inertia without the removed `Mat44::sScale`). Bugs fixed while porting:
+     `AABox::GetSupportingFace` sign (picked the wrong cell), `TransformedShape::ToRotor` typo;
+     `Shape::GetSubmergedVolume` inBaseOffset made unconditional for renderer-off consistency.
+   - **KEY FINDING — the real blocker is the convex-collision core, not a "base cleanup".** The
+     shape system is tightly coupled: `Shape.cpp` pulls in every shape header (Scaled/Compound/
+     Decorated/…), which are abstract until their signatures match the migrated base; and
+     `ConvexShape.cpp` registers `sCollideConvexVsConvex` / `sCastConvexVsConvex` into
+     `CollisionDispatch` (still `Vec3`/`Mat44` typedefs) and its collide/cast bodies ARE the
+     contact pipeline. So linking any shape ⇒ migrating `CollisionDispatch` (small, ~200 lines,
+     mechanical) **and** the convex collide/cast core, which overlaps step 8 (contact manifolds,
+     the hardest open problem). Sequence: migrate `CollisionDispatch` signatures → migrate the
+     convex collide/cast core (this is really step 8) → then the wrapper/other shape headers so
+     `Shape.cpp` compiles → then link + test.
    - TODO: Capsule, Plane, Compound/Decorated/Scaled/RotatedTranslated/OffsetCOM wrappers; stub or
      cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle/SoftBodyShape; a permanent BoxShape
      mass-properties unit test (needs the physics test framework, currently unlinkable).
