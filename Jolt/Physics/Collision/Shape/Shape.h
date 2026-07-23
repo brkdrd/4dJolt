@@ -206,8 +206,8 @@ public:
 	/// Check if this shape can only be used to create a static body or if it can also be dynamic/kinematic
 	virtual bool					MustBeStatic() const												{ return false; }
 
-	/// All shapes are centered around their center of mass. This function returns the center of mass position that needs to be applied to transform the shape to where it was created.
-	virtual Vec3					GetCenterOfMass() const												{ return Vec3::sZero(); }
+	/// All shapes are centered around their center of mass. This function returns the center of mass position that needs to be applied to transform the shape to where it was created. (4D)
+	virtual Vec4					GetCenterOfMass() const												{ return Vec4::sZero(); }
 
 	/// Get local bounding box including convex radius, this box is centered around the center of mass rather than the world transform
 	virtual AABox					GetLocalBounds() const = 0;
@@ -218,19 +218,9 @@ public:
 	/// Get world space bounds including convex radius.
 	/// This shape is scaled by inScale in local space first.
 	/// This function can be overridden to return a closer fitting world space bounding box, by default it will just transform what GetLocalBounds() returns.
-	virtual AABox					GetWorldSpaceBounds(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale) const { return GetLocalBounds().Scaled(inScale).Transformed(inCenterOfMassTransform); }
-
-	/// Get world space bounds including convex radius.
-	AABox							GetWorldSpaceBounds(DMat44Arg inCenterOfMassTransform, Vec3Arg inScale) const
-	{
-		// Use single precision version using the rotation only
-		AABox bounds = GetWorldSpaceBounds(inCenterOfMassTransform.GetRotation(), inScale);
-
-		// Apply translation
-		bounds.Translate(inCenterOfMassTransform.GetTranslation());
-
-		return bounds;
-	}
+	/// @param inCenterOfMassTransform 4D rigid transform (rotation + translation) of the center of mass.
+	/// @param inScale 4D scale in local space of the shape.
+	virtual AABox					GetWorldSpaceBounds(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale) const { return GetLocalBounds().Scaled(inScale).Transformed(inCenterOfMassTransform); }
 
 	/// Returns the radius of the biggest sphere that fits entirely in the shape. In case this shape consists of multiple sub shapes, it returns the smallest sphere of the parts.
 	/// This can be used as a measure of how far the shape can be moved without risking going through geometry.
@@ -248,59 +238,55 @@ public:
 	/// Get the material assigned to a particular sub shape ID
 	virtual const PhysicsMaterial *	GetMaterial(const SubShapeID &inSubShapeID) const = 0;
 
-	/// Get the surface normal of a particular sub shape ID and point on surface (all vectors are relative to center of mass for this shape).
+	/// Get the surface normal of a particular sub shape ID and point on surface (all vectors are relative to center of mass for this shape, 4D).
 	/// Note: When you have a CollideShapeResult or ShapeCastResult you should use -mPenetrationAxis.Normalized() as contact normal as GetSurfaceNormal will only return face normals (and not vertex or edge normals).
-	virtual Vec3					GetSurfaceNormal(const SubShapeID &inSubShapeID, Vec3Arg inLocalSurfacePosition) const = 0;
+	virtual Vec4					GetSurfaceNormal(const SubShapeID &inSubShapeID, Vec4Arg inLocalSurfacePosition) const = 0;
 
-	/// Type definition for a supporting face
-	using SupportingFace = StaticArray<Vec3, 32>;
+	/// Type definition for a supporting face. In 4D this may be a 3-cell of the contact polytope; vertex capacity may need revisiting.
+	using SupportingFace = StaticArray<Vec4, 32>;
 
 	/// Get the vertices of the face that faces inDirection the most (includes any convex radius). Note that this function can only return faces of
 	/// convex shapes or triangles, which is why a sub shape ID to get to that leaf must be provided.
 	/// @param inSubShapeID Sub shape ID of target shape
-	/// @param inDirection Direction that the face should be facing (in local space to this shape)
-	/// @param inCenterOfMassTransform Transform to transform outVertices with
-	/// @param inScale Scale in local space of the shape (scales relative to its center of mass)
+	/// @param inDirection Direction that the face should be facing (in local space to this shape, 4D)
+	/// @param inCenterOfMassTransform 4D rigid transform to transform outVertices with
+	/// @param inScale 4D scale in local space of the shape (scales relative to its center of mass)
 	/// @param outVertices Resulting face. The returned face can be empty if the shape doesn't have polygons to return (e.g. because it's a sphere). The face will be returned in world space.
-	virtual void					GetSupportingFace([[maybe_unused]] const SubShapeID &inSubShapeID, [[maybe_unused]] Vec3Arg inDirection, [[maybe_unused]] Vec3Arg inScale, [[maybe_unused]] Mat44Arg inCenterOfMassTransform, [[maybe_unused]] SupportingFace &outVertices) const { /* Nothing */ }
+	virtual void					GetSupportingFace([[maybe_unused]] const SubShapeID &inSubShapeID, [[maybe_unused]] Vec4Arg inDirection, [[maybe_unused]] Vec4Arg inScale, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] SupportingFace &outVertices) const { /* Nothing */ }
 
 	/// Get the user data of a particular sub shape ID. Corresponds with the value stored in Shape::GetUserData of the leaf shape pointed to by inSubShapeID.
 	virtual uint64					GetSubShapeUserData([[maybe_unused]] const SubShapeID &inSubShapeID) const			{ return mUserData; }
 
 	/// Get the direct child sub shape and its transform for a sub shape ID.
 	/// @param inSubShapeID Sub shape ID that indicates the path to the leaf shape
-	/// @param inPositionCOM The position of the center of mass of this shape
-	/// @param inRotation The orientation of this shape
-	/// @param inScale Scale in local space of the shape (scales relative to its center of mass)
+	/// @param inPositionCOM The position of the center of mass of this shape (4D)
+	/// @param inRotation The orientation of this shape (Cl(4,0) rotor)
+	/// @param inScale 4D scale in local space of the shape (scales relative to its center of mass)
 	/// @param outRemainder The remainder of the sub shape ID after removing the sub shape
 	/// @return Direct child sub shape and its transform, note that the body ID and sub shape ID will be invalid
-	virtual TransformedShape		GetSubShapeTransformedShape(const SubShapeID &inSubShapeID, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale, SubShapeID &outRemainder) const;
+	virtual TransformedShape		GetSubShapeTransformedShape(const SubShapeID &inSubShapeID, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale, SubShapeID &outRemainder) const;
 
 	/// Gets the properties needed to do buoyancy calculations for a body using this shape
-	/// @param inCenterOfMassTransform Transform that takes this shape (centered around center of mass) to world space (or a desired other space)
-	/// @param inScale Scale in local space of the shape (scales relative to its center of mass)
+	/// @param inCenterOfMassTransform 4D rigid transform that takes this shape (centered around center of mass) to world space (or a desired other space)
+	/// @param inScale 4D scale in local space of the shape (scales relative to its center of mass)
 	/// @param inSurface The surface plane of the liquid relative to inCenterOfMassTransform
-	/// @param outTotalVolume On return this contains the total volume of the shape
-	/// @param outSubmergedVolume On return this contains the submerged volume of the shape
-	/// @param outCenterOfBuoyancy On return this contains the world space center of mass of the submerged volume
-#ifdef JPH_DEBUG_RENDERER
+	/// @param outTotalVolume On return this contains the total volume of the shape (4D hypervolume)
+	/// @param outSubmergedVolume On return this contains the submerged volume of the shape (4D hypervolume)
+	/// @param outCenterOfBuoyancy On return this contains the world space center of mass of the submerged volume (4D point)
 	/// @param inBaseOffset The offset to transform inCenterOfMassTransform to world space (in double precision mode this can be used to shift the whole operation closer to the origin). Only used for debug drawing.
-#endif
-	virtual void					GetSubmergedVolume(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec3 &outCenterOfBuoyancy
-#ifdef JPH_DEBUG_RENDERER // Not using JPH_IF_DEBUG_RENDERER for Doxygen
-		, RVec3Arg inBaseOffset
-#endif
-		) const = 0;
+	/// TODO(4D): upstream guards inBaseOffset behind JPH_DEBUG_RENDERER; here it is unconditional so
+	/// the (already unconditional) convex-shape overrides match the base with the renderer off.
+	virtual void					GetSubmergedVolume(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, Vec4 &outCenterOfBuoyancy, RVec4Arg inBaseOffset) const = 0;
 
 #ifdef JPH_DEBUG_RENDERER
-	/// Draw the shape at a particular location with a particular color (debugging purposes)
-	virtual void					Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec3Arg inScale, ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const = 0;
+	/// Draw the shape at a particular location with a particular color (debugging purposes). inScale is a 4D scale.
+	virtual void					Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const = 0;
 
 	/// Draw the results of the GetSupportFunction with the convex radius added back on to show any errors introduced by this process (only relevant for convex shapes)
-	virtual void					DrawGetSupportFunction([[maybe_unused]] DebugRenderer *inRenderer, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] Vec3Arg inScale, [[maybe_unused]] ColorArg inColor, [[maybe_unused]] bool inDrawSupportDirection) const { /* Only implemented for convex shapes */ }
+	virtual void					DrawGetSupportFunction([[maybe_unused]] DebugRenderer *inRenderer, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] Vec4Arg inScale, [[maybe_unused]] ColorArg inColor, [[maybe_unused]] bool inDrawSupportDirection) const { /* Only implemented for convex shapes */ }
 
 	/// Draw the results of the GetSupportingFace function to show any errors introduced by this process (only relevant for convex shapes)
-	virtual void					DrawGetSupportingFace([[maybe_unused]] DebugRenderer *inRenderer, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] Vec3Arg inScale) const { /* Only implemented for convex shapes */ }
+	virtual void					DrawGetSupportingFace([[maybe_unused]] DebugRenderer *inRenderer, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] Vec4Arg inScale) const { /* Only implemented for convex shapes */ }
 #endif // JPH_DEBUG_RENDERER
 
 	/// Cast a ray against this shape, returns true if it finds a hit closer than ioHit.mFraction and updates that fraction. Otherwise ioHit is left untouched and the function returns false.
@@ -317,31 +303,31 @@ public:
 	/// Note that inPoint should be relative to the center of mass of this shape (i.e. subtract Shape::GetCenterOfMass() from inPoint if you want to test against the shape in the space it was created).
 	/// For a mesh shape, this test will only provide sensible information if the mesh is a closed manifold.
 	/// For each shape that collides, ioCollector will receive a hit.
-	virtual void					CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const = 0;
+	virtual void					CollidePoint(Vec4Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const = 0;
 
 	/// Collides all vertices of a soft body with this shape and updates SoftBodyVertex::mCollisionPlane, SoftBodyVertex::mCollidingShapeIndex and SoftBodyVertex::mLargestPenetration if a collision with more penetration was found.
-	/// @param inCenterOfMassTransform Center of mass transform for this shape relative to the vertices.
-	/// @param inScale Scale in local space of the shape (scales relative to its center of mass)
+	/// @param inCenterOfMassTransform 4D rigid transform for this shape relative to the vertices.
+	/// @param inScale 4D scale in local space of the shape (scales relative to its center of mass)
 	/// @param inVertices The vertices of the soft body
 	/// @param inNumVertices The number of vertices in inVertices
 	/// @param inCollidingShapeIndex Value to store in CollideSoftBodyVertexIterator::mCollidingShapeIndex when a collision was found
-	virtual void					CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const = 0;
+	virtual void					CollideSoftBodyVertices(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const = 0;
 
 	/// Collect the leaf transformed shapes of all leaf shapes of this shape.
 	/// inBox is the world space axis aligned box which leaf shapes should collide with.
-	/// inPositionCOM/inRotation/inScale describes the transform of this shape.
+	/// inPositionCOM/inRotation/inScale describes the transform of this shape (4D position, rotor, 4D scale).
 	/// inSubShapeIDCreator represents the current sub shape ID of this shape.
-	virtual void					CollectTransformedShapes(const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale, const SubShapeIDCreator &inSubShapeIDCreator, TransformedShapeCollector &ioCollector, const ShapeFilter &inShapeFilter) const;
+	virtual void					CollectTransformedShapes(const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale, const SubShapeIDCreator &inSubShapeIDCreator, TransformedShapeCollector &ioCollector, const ShapeFilter &inShapeFilter) const;
 
 	/// Transforms this shape and all of its children with inTransform, resulting shape(s) are passed to ioCollector.
 	/// Note that not all shapes support all transforms (especially true for scaling), the resulting shape will try to match the transform as accurately as possible.
-	/// @param inCenterOfMassTransform The transform (rotation, translation, scale) that the center of mass of the shape should get
+	/// @param inCenterOfMassTransform The 4D rigid transform (rotation, translation, scale) that the center of mass of the shape should get
 	/// @param ioCollector The transformed shapes will be passed to this collector
-	virtual void					TransformShape(Mat44Arg inCenterOfMassTransform, TransformedShapeCollector &ioCollector) const;
+	virtual void					TransformShape(RMat44Arg inCenterOfMassTransform, TransformedShapeCollector &ioCollector) const;
 
 	/// Scale this shape. Note that not all shapes support all scales, this will return a shape that matches the scale as accurately as possible. See Shape::IsValidScale for more information.
-	/// @param inScale The scale to use for this shape (note: this scale is applied to the entire shape in the space it was created, most other functions apply the scale in the space of the leaf shapes and from the center of mass!)
-	ShapeResult						ScaleShape(Vec3Arg inScale) const;
+	/// @param inScale The 4D scale to use for this shape (note: this scale is applied to the entire shape in the space it was created, most other functions apply the scale in the space of the leaf shapes and from the center of mass!)
+	ShapeResult						ScaleShape(Vec4Arg inScale) const;
 
 	/// An opaque buffer that holds shape specific information during GetTrianglesStart/Next.
 	struct alignas(16)				GetTrianglesContext { uint8 mData[4288]; };
@@ -352,17 +338,20 @@ public:
 	/// To start iterating over triangles, call this function first.
 	/// ioContext is a temporary buffer and should remain untouched until the last call to GetTrianglesNext.
 	/// inBox is the world space bounding in which you want to get the triangles.
-	/// inPositionCOM/inRotation/inScale describes the transform of this shape.
+	/// inPositionCOM/inRotation/inScale describes the transform of this shape (4D position, rotor, 4D scale).
 	/// To get the actual triangles call GetTrianglesNext.
-	virtual void					GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const = 0;
+	/// TODO(4D): the "triangle" tessellation model is a 3D concept. In 4D a shape boundary is tessellated
+	/// by tetrahedra/3-cells. Kept as Float4 vertices for now but the vertex-count-per-primitive
+	/// interpretation will need to change when the mesh/heightfield shapes are migrated.
+	virtual void					GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale) const = 0;
 
 	/// Call this repeatedly to get all triangles in the box.
-	/// outTriangleVertices should be large enough to hold 3 * inMaxTriangleRequested entries.
+	/// outTriangleVertices should be large enough to hold 3 * inMaxTriangleRequested entries (4D Float4 positions).
 	/// outMaterials (if it is not null) should contain inMaxTrianglesRequested entries.
 	/// The function returns the amount of triangles that it found (which will be <= inMaxTrianglesRequested), or 0 if there are no more triangles.
 	/// Note that the function can return a value < inMaxTrianglesRequested and still have more triangles to process (triangles can be returned in blocks).
 	/// Note that the function may return triangles outside of the requested box, only coarse culling is performed on the returned triangles.
-	virtual int						GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float3 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const = 0;
+	virtual int						GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float4 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const = 0;
 
 	///@name Binary serialization of the shape. Note that this saves the 'cooked' shape in a format which will not be backwards compatible for newer library versions.
 	/// In this case you need to recreate the shape from the ShapeSettings object and save it again. The user is expected to call SaveBinaryState followed by SaveMaterialState and SaveSubShapeState.
@@ -435,14 +424,14 @@ public:
 	/// * CylinderShape: Scale must be uniform in XZ plane, Y can scale independently (signs of scale are ignored).
 	/// * RotatedTranslatedShape: Scale must not cause shear in the child shape.
 	/// * CompoundShape: Scale must not cause shear in any of the child shapes.
-	virtual bool					IsValidScale(Vec3Arg inScale) const;
+	virtual bool					IsValidScale(Vec4Arg inScale) const;
 
 	/// This function will make sure that if you wrap this shape in a ScaledShape that the scale is valid.
 	/// Note that this involves discarding components of the scale that are invalid, so the resulting scaled shape may be different than the requested scale.
 	/// Compare the return value of this function with the scale you passed in to detect major inconsistencies and possibly warn the user.
-	/// @param inScale Local space scale for this shape.
+	/// @param inScale Local space 4D scale for this shape.
 	/// @return Scale that can be used to wrap this shape in a ScaledShape. IsValidScale will return true for this scale.
-	virtual Vec3					MakeScaleValid(Vec3Arg inScale) const;
+	virtual Vec4					MakeScaleValid(Vec4Arg inScale) const;
 
 #ifdef JPH_DEBUG_RENDERER
 	/// Debug helper which draws the intersection between water and the shapes, the center of buoyancy and the submerged volume
@@ -454,7 +443,7 @@ protected:
 	virtual void					RestoreBinaryState(StreamIn &inStream);
 
 	/// A fallback version of CollidePoint that uses a ray cast and counts the number of hits to determine if the point is inside the shape. Odd number of hits means inside, even number of hits means outside.
-	static void						sCollidePointUsingRayCast(const Shape &inShape, Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter);
+	static void						sCollidePointUsingRayCast(const Shape &inShape, Vec4Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter);
 
 private:
 	uint64							mUserData = 0;

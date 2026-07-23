@@ -18,18 +18,18 @@ public:
 	/// Default constructor for deserialization
 							BoxShapeSettings() = default;
 
-	/// Create a box with half edge length inHalfExtent and convex radius inConvexRadius.
+	/// Create a box (tesseract) with half edge length inHalfExtent and convex radius inConvexRadius.
 	/// (internally the convex radius will be subtracted from the half extent so the total box will not grow with the convex radius).
-	explicit				BoxShapeSettings(Vec3Arg inHalfExtent, float inConvexRadius = cDefaultConvexRadius, const PhysicsMaterial *inMaterial = nullptr) : ConvexShapeSettings(inMaterial), mHalfExtent(inHalfExtent), mConvexRadius(inConvexRadius) { }
+	explicit				BoxShapeSettings(Vec4Arg inHalfExtent, float inConvexRadius = cDefaultConvexRadius, const PhysicsMaterial *inMaterial = nullptr) : ConvexShapeSettings(inMaterial), mHalfExtent(inHalfExtent), mConvexRadius(inConvexRadius) { }
 
 	// See: ShapeSettings
 	virtual ShapeResult		Create() const override;
 
-	Vec3					mHalfExtent = Vec3::sZero();								///< Half the size of the box (including convex radius)
+	Vec4					mHalfExtent = Vec4::sZero();								///< Half the size of the box (including convex radius)
 	float					mConvexRadius = 0.0f;
 };
 
-/// A box, centered around the origin
+/// A 4D box (tesseract), centered around the origin
 class JPH_EXPORT BoxShape final : public ConvexShape
 {
 public:
@@ -39,12 +39,12 @@ public:
 							BoxShape() : ConvexShape(EShapeSubType::Box) { }
 							BoxShape(const BoxShapeSettings &inSettings, ShapeResult &outResult);
 
-	/// Create a box with half edge length inHalfExtent and convex radius inConvexRadius.
+	/// Create a box (tesseract) with half edge length inHalfExtent and convex radius inConvexRadius.
 	/// (internally the convex radius will be subtracted from the half extent so the total box will not grow with the convex radius).
-	explicit				BoxShape(Vec3Arg inHalfExtent, float inConvexRadius = cDefaultConvexRadius, const PhysicsMaterial *inMaterial = nullptr) : ConvexShape(EShapeSubType::Box, inMaterial), mHalfExtent(inHalfExtent), mConvexRadius(min(inConvexRadius, inHalfExtent.ReduceMin())) { JPH_ASSERT(inHalfExtent.ReduceMin() >= 0.0f); JPH_ASSERT(inConvexRadius >= 0.0f); }
+	explicit				BoxShape(Vec4Arg inHalfExtent, float inConvexRadius = cDefaultConvexRadius, const PhysicsMaterial *inMaterial = nullptr) : ConvexShape(EShapeSubType::Box, inMaterial), mHalfExtent(inHalfExtent), mConvexRadius(min(inConvexRadius, inHalfExtent.ReduceMin())) { JPH_ASSERT(inHalfExtent.ReduceMin() >= 0.0f); JPH_ASSERT(inConvexRadius >= 0.0f); }
 
 	/// Get half extent of box
-	Vec3					GetHalfExtent() const										{ return mHalfExtent; }
+	Vec4					GetHalfExtent() const										{ return mHalfExtent; }
 
 	// See Shape::GetLocalBounds
 	virtual AABox			GetLocalBounds() const override								{ return AABox(-mHalfExtent, mHalfExtent); }
@@ -56,17 +56,17 @@ public:
 	virtual MassProperties	GetMassProperties() const override;
 
 	// See Shape::GetSurfaceNormal
-	virtual Vec3			GetSurfaceNormal(const SubShapeID &inSubShapeID, Vec3Arg inLocalSurfacePosition) const override;
+	virtual Vec4			GetSurfaceNormal(const SubShapeID &inSubShapeID, Vec4Arg inLocalSurfacePosition) const override;
 
 	// See Shape::GetSupportingFace
-	virtual void			GetSupportingFace(const SubShapeID &inSubShapeID, Vec3Arg inDirection, Vec3Arg inScale, Mat44Arg inCenterOfMassTransform, SupportingFace &outVertices) const override;
+	virtual void			GetSupportingFace(const SubShapeID &inSubShapeID, Vec4Arg inDirection, Vec4Arg inScale, RMat44Arg inCenterOfMassTransform, SupportingFace &outVertices) const override;
 
 	// See ConvexShape::GetSupportFunction
-	virtual const Support *	GetSupportFunction(ESupportMode inMode, SupportBuffer &inBuffer, Vec3Arg inScale) const override;
+	virtual const Support *	GetSupportFunction(ESupportMode inMode, SupportBuffer &inBuffer, Vec4Arg inScale) const override;
 
 #ifdef JPH_DEBUG_RENDERER
 	// See Shape::Draw
-	virtual void			Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec3Arg inScale, ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const override;
+	virtual void			Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const override;
 #endif // JPH_DEBUG_RENDERER
 
 	// See Shape::CastRay
@@ -74,22 +74,22 @@ public:
 	virtual void			CastRay(const RayCast &inRay, const RayCastSettings &inRayCastSettings, const SubShapeIDCreator &inSubShapeIDCreator, CastRayCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
 
 	// See: Shape::CollidePoint
-	virtual void			CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
+	virtual void			CollidePoint(Vec4Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
 
 	// See: Shape::CollideSoftBodyVertices
-	virtual void			CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const override;
+	virtual void			CollideSoftBodyVertices(RMat44Arg inCenterOfMassTransform, Vec4Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const override;
 
 	// See Shape::GetTrianglesStart
-	virtual void			GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const override;
+	virtual void			GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale) const override;
 
 	// See Shape::GetTrianglesNext
-	virtual int				GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float3 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const override;
+	virtual int				GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, Float4 *outTriangleVertices, const PhysicsMaterial **outMaterials = nullptr) const override;
 
 	// See Shape
 	virtual void			SaveBinaryState(StreamOut &inStream) const override;
 
 	// See Shape::GetStats
-	virtual Stats			GetStats() const override									{ return Stats(sizeof(*this), 12); }
+	virtual Stats			GetStats() const override									{ return Stats(sizeof(*this), 0); }
 
 	// See Shape::GetVolume
 	virtual float			GetVolume() const override									{ return GetLocalBounds().GetVolume(); }
@@ -108,7 +108,7 @@ private:
 	// Class for GetSupportFunction
 	class					Box;
 
-	Vec3					mHalfExtent = Vec3::sZero();								///< Half the size of the box (including convex radius)
+	Vec4					mHalfExtent = Vec4::sZero();								///< Half the size of the box (including convex radius)
 	float					mConvexRadius = 0.0f;
 };
 
