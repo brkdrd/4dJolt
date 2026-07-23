@@ -43,7 +43,8 @@ public:
 	virtual bool				ReadPrimitiveData(UVec4 &outPrimitive) override;
 	virtual bool				ReadPrimitiveData(Quat &outPrimitive) override;
 	virtual bool				ReadPrimitiveData(Mat44 &outPrimitive) override;
-	virtual bool				ReadPrimitiveData(DMat44 &outPrimitive) override;
+	virtual bool				ReadPrimitiveData(Rotor &outPrimitive) override;
+	virtual bool				ReadPrimitiveData(Bivec &outPrimitive) override;
 
 private:
 	bool						ReadChar(char &outChar);

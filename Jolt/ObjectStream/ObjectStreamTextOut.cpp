@@ -8,6 +8,8 @@
 
 #include <Jolt/ObjectStream/ObjectStreamTextOut.h>
 #include <Jolt/Core/StringTools.h>
+#include <Jolt/Math/Rotor.h>
+#include <Jolt/Math/Bivec.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -44,7 +46,8 @@ void ObjectStreamTextOut::WriteDataType(EOSDataType inType)
 	case EOSDataType::T_UVec4:		WriteWord("uvec4");			break;
 	case EOSDataType::T_Quat:		WriteWord("quat");			break;
 	case EOSDataType::T_Mat44:		WriteWord("mat44");			break;
-	case EOSDataType::T_DMat44:		WriteWord("dmat44");		break;
+	case EOSDataType::T_Rotor:		WriteWord("rotor");			break;
+	case EOSDataType::T_Bivec:		WriteWord("bivec");			break;
 	case EOSDataType::Invalid:
 	default:						JPH_ASSERT(false);			break;
 	}
@@ -191,6 +194,40 @@ void ObjectStreamTextOut::WritePrimitiveData(const Quat &inPrimitive)
 	WritePrimitiveData(inPrimitive.GetW());
 }
 
+void ObjectStreamTextOut::WritePrimitiveData(const Rotor &inPrimitive)
+{
+	WritePrimitiveData(inPrimitive.GetScalar());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE12());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE13());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE14());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE23());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE24());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE34());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetPseudoscalar());
+}
+
+void ObjectStreamTextOut::WritePrimitiveData(const Bivec &inPrimitive)
+{
+	WritePrimitiveData(inPrimitive.GetE12());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE13());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE14());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE23());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE24());
+	WriteChar(' ');
+	WritePrimitiveData(inPrimitive.GetE34());
+}
+
 void ObjectStreamTextOut::WritePrimitiveData(const Mat44 &inPrimitive)
 {
 	WritePrimitiveData(inPrimitive.GetColumn4(0));
@@ -202,16 +239,6 @@ void ObjectStreamTextOut::WritePrimitiveData(const Mat44 &inPrimitive)
 	WritePrimitiveData(inPrimitive.GetColumn4(3));
 }
 
-void ObjectStreamTextOut::WritePrimitiveData(const DMat44 &inPrimitive)
-{
-	WritePrimitiveData(inPrimitive.GetColumn4(0));
-	WriteChar(' ');
-	WritePrimitiveData(inPrimitive.GetColumn4(1));
-	WriteChar(' ');
-	WritePrimitiveData(inPrimitive.GetColumn4(2));
-	WriteChar(' ');
-	WritePrimitiveData(inPrimitive.GetTranslation());
-}
 
 void ObjectStreamTextOut::WritePrimitiveData(const String &inPrimitive)
 {

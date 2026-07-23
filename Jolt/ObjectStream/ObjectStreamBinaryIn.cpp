@@ -7,6 +7,8 @@
 #ifdef JPH_OBJECT_STREAM
 
 #include <Jolt/ObjectStream/ObjectStreamBinaryIn.h>
+#include <Jolt/Math/Rotor.h>
+#include <Jolt/Math/Bivec.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -237,15 +239,24 @@ bool ObjectStreamBinaryIn::ReadPrimitiveData(Mat44 &outPrimitive)
 	return true;
 }
 
-bool ObjectStreamBinaryIn::ReadPrimitiveData(DMat44 &outPrimitive)
+bool ObjectStreamBinaryIn::ReadPrimitiveData(Rotor &outPrimitive)
 {
-	Vec4 c0, c1, c2;
-	DVec4 c3;
-	if (!ReadPrimitiveData(c0) || !ReadPrimitiveData(c1) || !ReadPrimitiveData(c2) || !ReadPrimitiveData(c3))
-		return false;
-	outPrimitive = DMat44(c0, c1, c2, c3);
+	Rotor primitive;
+	mStream.read((char *)&primitive, sizeof(primitive));
+	if (mStream.fail()) return false;
+	outPrimitive = primitive;
 	return true;
 }
+
+bool ObjectStreamBinaryIn::ReadPrimitiveData(Bivec &outPrimitive)
+{
+	Bivec primitive;
+	mStream.read((char *)&primitive, sizeof(primitive));
+	if (mStream.fail()) return false;
+	outPrimitive = primitive;
+	return true;
+}
+
 
 JPH_NAMESPACE_END
 

@@ -7,6 +7,8 @@
 #ifdef JPH_OBJECT_STREAM
 
 #include <Jolt/ObjectStream/ObjectStreamTextIn.h>
+#include <Jolt/Math/Rotor.h>
+#include <Jolt/Math/Bivec.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -67,8 +69,10 @@ bool ObjectStreamTextIn::ReadDataType(EOSDataType &outType)
 			outType = EOSDataType::T_Quat;
 		else if (token == "mat44")
 			outType = EOSDataType::T_Mat44;
-		else if (token == "dmat44")
-			outType = EOSDataType::T_DMat44;
+		else if (token == "rotor")
+			outType = EOSDataType::T_Rotor;
+		else if (token == "bivec")
+			outType = EOSDataType::T_Bivec;
 		else
 		{
 			Trace("ObjectStreamTextIn: Found unknown data type.");
@@ -357,6 +361,26 @@ bool ObjectStreamTextIn::ReadPrimitiveData(Quat &outPrimitive)
 	return true;
 }
 
+bool ObjectStreamTextIn::ReadPrimitiveData(Rotor &outPrimitive)
+{
+	float s, e12, e13, e14, e23, e24, e34, p;
+	if (!ReadPrimitiveData(s) || !ReadPrimitiveData(e12) || !ReadPrimitiveData(e13) || !ReadPrimitiveData(e14)
+		|| !ReadPrimitiveData(e23) || !ReadPrimitiveData(e24) || !ReadPrimitiveData(e34) || !ReadPrimitiveData(p))
+		return false;
+	outPrimitive = Rotor(s, e12, e13, e14, e23, e24, e34, p);
+	return true;
+}
+
+bool ObjectStreamTextIn::ReadPrimitiveData(Bivec &outPrimitive)
+{
+	float e12, e13, e14, e23, e24, e34;
+	if (!ReadPrimitiveData(e12) || !ReadPrimitiveData(e13) || !ReadPrimitiveData(e14)
+		|| !ReadPrimitiveData(e23) || !ReadPrimitiveData(e24) || !ReadPrimitiveData(e34))
+		return false;
+	outPrimitive = Bivec(e12, e13, e14, e23, e24, e34);
+	return true;
+}
+
 bool ObjectStreamTextIn::ReadPrimitiveData(Mat44 &outPrimitive)
 {
 	Vec4 c0, c1, c2, c3;
@@ -366,15 +390,6 @@ bool ObjectStreamTextIn::ReadPrimitiveData(Mat44 &outPrimitive)
 	return true;
 }
 
-bool ObjectStreamTextIn::ReadPrimitiveData(DMat44 &outPrimitive)
-{
-	Vec4 c0, c1, c2;
-	DVec4 c3;
-	if (!ReadPrimitiveData(c0) || !ReadPrimitiveData(c1) || !ReadPrimitiveData(c2) || !ReadPrimitiveData(c3))
-		return false;
-	outPrimitive = DMat44(c0, c1, c2, c3);
-	return true;
-}
 
 bool ObjectStreamTextIn::ReadChar(char &outChar)
 {

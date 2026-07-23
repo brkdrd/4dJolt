@@ -94,6 +94,7 @@ if (ENABLE_OBJECT_STREAM)
 	set(UNIT_TESTS_SRC_FILES
 		${UNIT_TESTS_SRC_FILES}
 		${UNIT_TESTS_ROOT}/ObjectStream/ObjectStreamTest.cpp
+		${UNIT_TESTS_ROOT}/ObjectStream/RotorBivecStreamTest.cpp
 	)
 endif()
 

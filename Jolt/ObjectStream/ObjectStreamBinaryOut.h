@@ -43,7 +43,8 @@ public:
 	virtual void				WritePrimitiveData(const UVec4 &inPrimitive) override;
 	virtual void				WritePrimitiveData(const Quat &inPrimitive) override;
 	virtual void				WritePrimitiveData(const Mat44 &inPrimitive) override;
-	virtual void				WritePrimitiveData(const DMat44 &inPrimitive) override;
+	virtual void				WritePrimitiveData(const Rotor &inPrimitive) override;
+	virtual void				WritePrimitiveData(const Bivec &inPrimitive) override;
 
 private:
 	using StringTable = UnorderedMap<String, uint32>;

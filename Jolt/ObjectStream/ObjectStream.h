@@ -66,7 +66,8 @@ public:
 	virtual bool				ReadPrimitiveData(UVec4 &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(Quat &outPrimitive) = 0;
 	virtual bool				ReadPrimitiveData(Mat44 &outPrimitive) = 0;
-	virtual bool				ReadPrimitiveData(DMat44 &outPrimitive) = 0;
+	virtual bool				ReadPrimitiveData(Rotor &outPrimitive) = 0;
+	virtual bool				ReadPrimitiveData(Bivec &outPrimitive) = 0;
 
 	///@name Read compounds
 	virtual bool				ReadClassData(const char *inClassName, void *inInstance) = 0;
@@ -102,7 +103,8 @@ public:
 	virtual void				WritePrimitiveData(const UVec4 &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const Quat &inPrimitive) = 0;
 	virtual void				WritePrimitiveData(const Mat44 &inPrimitive) = 0;
-	virtual void				WritePrimitiveData(const DMat44 &inPrimitive) = 0;
+	virtual void				WritePrimitiveData(const Rotor &inPrimitive) = 0;
+	virtual void				WritePrimitiveData(const Bivec &inPrimitive) = 0;
 
 	///@name Write compounds
 	virtual void				WritePointerData(const RTTI *inRTTI, const void *inPointer) = 0;

@@ -122,15 +122,28 @@ public:
 		return *this;
 	}
 
-	DeterminismLog &		operator << (DMat44Arg inValue)
-	{
-		*this << inValue.GetColumn4(0) << " " << inValue.GetColumn4(1) << " " << inValue.GetColumn4(2) << " " << inValue.GetTranslation();
-		return *this;
-	}
-
 	DeterminismLog &		operator << (QuatArg inValue)
 	{
 		*this << inValue.GetXYZW();
+		return *this;
+	}
+
+	DeterminismLog &		operator << (RotorArg inValue)
+	{
+		mLog << std::hex
+			<< std::setw(8) << Convert(inValue.GetScalar()) << " " << std::setw(8) << Convert(inValue.GetE12()) << " "
+			<< std::setw(8) << Convert(inValue.GetE13()) << " " << std::setw(8) << Convert(inValue.GetE14()) << " "
+			<< std::setw(8) << Convert(inValue.GetE23()) << " " << std::setw(8) << Convert(inValue.GetE24()) << " "
+			<< std::setw(8) << Convert(inValue.GetE34()) << " " << std::setw(8) << Convert(inValue.GetPseudoscalar());
+		return *this;
+	}
+
+	DeterminismLog &		operator << (BivecArg inValue)
+	{
+		mLog << std::hex
+			<< std::setw(8) << Convert(inValue.GetE12()) << " " << std::setw(8) << Convert(inValue.GetE13()) << " "
+			<< std::setw(8) << Convert(inValue.GetE14()) << " " << std::setw(8) << Convert(inValue.GetE23()) << " "
+			<< std::setw(8) << Convert(inValue.GetE24()) << " " << std::setw(8) << Convert(inValue.GetE34());
 		return *this;
 	}
 

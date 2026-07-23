@@ -42,8 +42,9 @@ public:
 	virtual void				WritePrimitiveData(const Vec4 &inPrimitive) override;
 	virtual void				WritePrimitiveData(const UVec4 &inPrimitive) override;
 	virtual void				WritePrimitiveData(const Quat &inPrimitive) override;
+	virtual void				WritePrimitiveData(const Rotor &inPrimitive) override;
+	virtual void				WritePrimitiveData(const Bivec &inPrimitive) override;
 	virtual void				WritePrimitiveData(const Mat44 &inPrimitive) override;
-	virtual void				WritePrimitiveData(const DMat44 &inPrimitive) override;
 
 	///@name Layout hints (for text output)
 	virtual void				HintNextItem() override;

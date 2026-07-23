@@ -8,6 +8,8 @@
 
 #include <Jolt/ObjectStream/ObjectStreamBinaryOut.h>
 #include <Jolt/Core/StringTools.h>
+#include <Jolt/Math/Rotor.h>
+#include <Jolt/Math/Bivec.h>
 
 JPH_NAMESPACE_BEGIN
 
@@ -151,13 +153,16 @@ void ObjectStreamBinaryOut::WritePrimitiveData(const Mat44 &inPrimitive)
 	mStream.write((const char *)&inPrimitive, sizeof(inPrimitive));
 }
 
-void ObjectStreamBinaryOut::WritePrimitiveData(const DMat44 &inPrimitive)
+void ObjectStreamBinaryOut::WritePrimitiveData(const Rotor &inPrimitive)
 {
-	WritePrimitiveData(inPrimitive.GetColumn4(0));
-	WritePrimitiveData(inPrimitive.GetColumn4(1));
-	WritePrimitiveData(inPrimitive.GetColumn4(2));
-	WritePrimitiveData(inPrimitive.GetTranslation());
+	mStream.write((const char *)&inPrimitive, sizeof(inPrimitive));
 }
+
+void ObjectStreamBinaryOut::WritePrimitiveData(const Bivec &inPrimitive)
+{
+	mStream.write((const char *)&inPrimitive, sizeof(inPrimitive));
+}
+
 
 JPH_NAMESPACE_END
 
