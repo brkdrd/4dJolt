@@ -17,20 +17,31 @@ got stuck.
 ## Build & test
 
 ```bash
-cmake -S Build -B build -DCMAKE_BUILD_TYPE=Release   # already configured in ./build (gcc, Release)
+# v1 is HEADLESS: build with the debug renderer OFF (the 3D DebugRenderer is deferred).
+cmake -S Build -B build -DCMAKE_BUILD_TYPE=Release -DDEBUG_RENDERER_IN_DEBUG_AND_RELEASE=OFF
 cmake --build build -j$(nproc)                        # currently FAILS, see status below
 ./build/UnitTests                                     # binary in repo is STALE (pre-4D tests) — do not trust it
 ```
 
-**Current build status (verified 2026-07-22): broken, ~3,270 errors** with `make -k` (down
-from ~3,800: AABox include fix in Phase A, then the TransformedShape/Shape base fixes and the
-BoxShape/SphereShape ports in Phase B step 6). The trivial first-blocker cascade is gone; every
-remaining error is in an un-migrated layer, so the counts are now meaningful.
-Error census by area: ConstraintPart headers (~840, the largest), DebugRenderer (~260), Shape
-hierarchy (~700), SoftBody/Character/Hair/PhysicsSystem (~200). Dominant error classes:
-`Vec3 ↔ Bivec` conversions, `Body::GetInverseInertia` removed, `Mat44::Multiply3x3` removed,
-`RVec4 → RVec3` conversions. i.e. the un-migrated layers no longer compile against the
-migrated Body/Math API. This is Phase B work.
+**Current build status (verified 2026-07-22): broken, ~2,790 errors** with `make -k` **and the
+debug renderer OFF** (`-DDEBUG_RENDERER_IN_DEBUG_AND_RELEASE=OFF`; with it ON it's ~3,270, of
+which ~480 are DebugRenderer/Draw noise). Turning the renderer off is the sanctioned v1 direction
+and makes the counts reflect the real migration surface. Progress so far: AABox include fix
+(Phase A), TransformedShape/Shape base fixes, BoxShape/SphereShape ports, CollisionDispatch +
+ConvexShape convex-vs-convex collide path (Phase B step 6). Every remaining error is in an
+un-migrated layer. Error census (renderer off) by area:
+- **ConstraintPart headers (~1,100, the largest single block)** — Axis 441, DualAxis 270, Point
+  171, RotationEuler 136, Angle 91, HingeRotation 55. This is the constraint solver (conceptual
+  gap 2); every part takes a `Vec3` axis and needs bivector-Jacobian redesign, not a type swap.
+- **Shape hierarchy (~500)** — wrapper shapes Compound (96) / RotatedTranslated (60) / Decorated
+  (54) / Scaled (44) + CompoundShapeVisitors (58) [v1 set, need porting]; ConvexHull (60) [v1];
+  Mesh (48) / HeightField (37) / Cylinder (36) / Plane (36) [cut for v1 → exclude]; and
+  GetTrianglesContext (42, still 3D).
+- **PhysicsSystem (38), ContactConstraintManager (34)** — the stepping loop + contact solver.
+
+Dominant error classes: `Vec3 ↔ Bivec`/`Vec4` conversions, `Body::GetInverseInertia` removed,
+`Mat44::Multiply3x3`/`sScale`/`sRotationTranslation` removed, `RVec4 → RVec3`. This is Phase B/C
+work.
 
 ## The 4D type system (established, do not re-litigate)
 
@@ -284,19 +295,27 @@ PerformanceTest runs on a 4D scene.
      build diagonal inertia without the removed `Mat44::sScale`). Bugs fixed while porting:
      `AABox::GetSupportingFace` sign (picked the wrong cell), `TransformedShape::ToRotor` typo;
      `Shape::GetSubmergedVolume` inBaseOffset made unconditional for renderer-off consistency.
-   - **KEY FINDING — the real blocker is the convex-collision core, not a "base cleanup".** The
-     shape system is tightly coupled: `Shape.cpp` pulls in every shape header (Scaled/Compound/
-     Decorated/…), which are abstract until their signatures match the migrated base; and
-     `ConvexShape.cpp` registers `sCollideConvexVsConvex` / `sCastConvexVsConvex` into
-     `CollisionDispatch` (still `Vec3`/`Mat44` typedefs) and its collide/cast bodies ARE the
-     contact pipeline. So linking any shape ⇒ migrating `CollisionDispatch` (small, ~200 lines,
-     mechanical) **and** the convex collide/cast core, which overlaps step 8 (contact manifolds,
-     the hardest open problem). Sequence: migrate `CollisionDispatch` signatures → migrate the
-     convex collide/cast core (this is really step 8) → then the wrapper/other shape headers so
-     `Shape.cpp` compiles → then link + test.
-   - TODO: Capsule, Plane, Compound/Decorated/Scaled/RotatedTranslated/OffsetCOM wrappers; stub or
-     cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle/SoftBodyShape; a permanent BoxShape
-     mass-properties unit test (needs the physics test framework, currently unlinkable).
+   - DONE: `CollisionDispatch` migrated (Vec4/RMat44) and `ConvexShape` convex-vs-convex **collide
+     path** (`sCollideConvexVsConvex` — GJK+EPA penetration, split RMat44 into Mat44 rotation +
+     Vec4 translation for the local-space support functions), `CollidePoint`, fallback `CastRay`.
+     ConvexShape/SphereShape/BoxShape all compile clean with the renderer off.
+   - DONE: turned the debug renderer OFF for the build (v1 is headless) — this removes the
+     DebugRenderer + per-shape `Draw` errors and makes the count reflect the real surface.
+   - **NEW GEOMETRY BUG FOUND:** `GJKClosestPoint::CastShape` (both overloads) and
+     `EPAPenetrationDepth::CastShape` take a pure-rotation `Mat44Arg inStart` and build
+     `TransformedConvexObject(inStart, Vec4::sZero(), …)`, so the **cast start translation is
+     dropped** (3D Jolt kept it in the Mat44). Fix: change those to `RMat44Arg inStart` and use
+     `inStart.GetRotation()` / `Vec4(inStart.GetTranslation())`. `ConvexShape::sCastConvexVsConvex`
+     is stubbed until this lands.
+   - **Next, in order:** (a) fix the geometry `GJK/EPA CastShape` start (above) and un-stub
+     `sCastConvexVsConvex`; (b) port the wrapper shapes Compound/Decorated/Scaled/
+     RotatedTranslated/OffsetCOM + ConvexHull + Capsule + a real 4D PlaneShape, and cmake-exclude
+     Mesh/HeightField/Cylinder/Tapered*/Triangle so `Shape.cpp` (which includes every shape header)
+     compiles; (c) migrate `ContactConstraintManager` + the ConstraintParts (bivector Jacobians —
+     conceptual gap 2) and `PhysicsSystem` stepping loop; (d) link + a permanent BoxShape/collision
+     unit test.
+   - Also still TODO: `GetTrianglesStart/Next` and `GetSubmergedVolume` are stubbed on the convex
+     shapes (S^3 tetra tessellation; 4D polytope submerged-volume clip).
 7. BroadPhase: QuadTree AABB logic → 4D AABox (mostly mechanical; AABox4 SIMD already done).
 8. Contact manifold pipeline (conceptual gap 1): supporting-face polyhedra, halfspace clipping,
    ≥5-point manifold reduction, `ContactConstraintManager`.
