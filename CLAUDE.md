@@ -103,9 +103,12 @@ the entire constraint/contact solver (`Constraints/`, `ContactConstraintManager`
 `ConstraintPart/*`), `PhysicsSystem.cpp` stepping loop, islands, DebugRenderer, SoftBody,
 Character, Vehicle, Ragdoll, Hair, TestFramework/Samples/JoltViewer.
 
-### ObjectStream — extended for Vec4/DVec4/Float4 but **Rotor and Bivec are not registered**
-`BodyCreationSettings::mRotation/mAngularVelocity` are excluded from `JPH_ADD_ATTRIBUTE`
-(TODO at `BodyCreationSettings.cpp:18`); they round-trip only via binary SaveState.
+### ObjectStream — Rotor/Bivec now registered as primitives (Phase B step 5, 2026-07-22)
+`Rotor` and `Bivec` are first-class ObjectStream primitives (text + binary), and
+`BodyCreationSettings::mRotation/mAngularVelocity` are re-enabled as `JPH_ADD_ATTRIBUTE`s — the
+TU compiles clean and round-trips again (verified by `UnitTests/ObjectStream/
+RotorBivecStreamTest.cpp`). Still 3D-lossy here: `DVec4` text/binary serialization writes only
+3 components (drops W — part of bug #6), as does the `DVec4` DeterminismLog operator.
 
 ### Tests — algebra suite now exists (test-first), rest still a gap
 `UnitTests/Geometry/*` were genuinely rewritten for 4D (pentachoron/hypercube hull tests, 4D
@@ -262,8 +265,9 @@ PerformanceTest runs on a 4D scene.
    and the remainder is all Phase B un-migrated-layer work.
 
 **Phase B — restore an end-to-end simulating core:**
-5. ObjectStream primitives for Rotor/Bivec; re-enable the excluded attributes; DeterminismLog
-   operators for Vec4/Rotor/Bivec.
+5. DONE (2026-07-22): ObjectStream primitives for Rotor/Bivec (text + binary), excluded
+   `BodyCreationSettings` attributes re-enabled, DeterminismLog operators for Rotor/Bivec added.
+   Verified by `RotorBivecStreamTest`. Remaining nit: `DVec4` serialization still drops W (bug #6).
 6. Shape layer for the v1 shape set (Box→tesseract mass properties & support fn, Capsule,
    Plane, Compound/Decorated/Scaled/RotatedTranslated/OffsetCOM mechanical ports); stub or
    cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle/SoftBodyShape; make
