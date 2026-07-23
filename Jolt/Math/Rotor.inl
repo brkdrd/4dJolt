@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <Jolt/Math/Vec4.h>
+#include <Jolt/Math/Bivec.h>
 #include <Jolt/Math/Trigonometry.h>
 #include <Jolt/Core/HashCombine.h>
 
@@ -10,6 +11,61 @@
 JPH_MAKE_HASHABLE(JPH::Rotor, t.GetScalar(), t.GetE12(), t.GetE13(), t.GetE14(), t.GetE23(), t.GetE24(), t.GetE34(), t.GetPseudoscalar())
 
 JPH_NAMESPACE_BEGIN
+
+/// Spin(4) = SU(2)xSU(2). The pseudoscalar I = e1234 is central with I^2 = +1, so the projectors
+/// P+- = (1 +- I)/2 split the even subalgebra into two commuting copies of the quaternions H. A
+/// rotor R = [s, e12, e13, e14, e23, e24, e34, e1234] maps to two quaternions
+///   qL = (s + p, e12 - e34, e13 + e24, e14 - e23)   (the +I eigenspace)
+///   qR = (s - p, e12 + e34, e13 - e24, e14 + e23)   (the -I eigenspace)
+/// and R is reconstructed from the pair. Normalization, exp/log and slerp are all just the
+/// corresponding per-quaternion operation applied to qL and qR independently. Each quaternion is
+/// stored as (w, x, y, z) in a Lane4.
+namespace RotorImpl {
+
+JPH_INLINE void sToQuats(const Vec8 &inR, Lane4 &outL, Lane4 &outR)
+{
+	float s = inR[0], b12 = inR[1], b13 = inR[2], b14 = inR[3], b23 = inR[4], b24 = inR[5], b34 = inR[6], p = inR[7];
+	outL = Lane4(s + p, b12 - b34, b13 + b24, b14 - b23);
+	outR = Lane4(s - p, b12 + b34, b13 - b24, b14 + b23);
+}
+
+JPH_INLINE Rotor sFromQuats(Lane4Arg inL, Lane4Arg inR)
+{
+	float l0 = inL.GetX(), l1 = inL.GetY(), l2 = inL.GetZ(), l3 = inL.GetW();
+	float r0 = inR.GetX(), r1 = inR.GetY(), r2 = inR.GetZ(), r3 = inR.GetW();
+	return Rotor(
+		0.5f * (l0 + r0),   // s
+		0.5f * (l1 + r1),   // e12
+		0.5f * (l2 + r2),   // e13
+		0.5f * (l3 + r3),   // e14
+		0.5f * (r3 - l3),   // e23
+		0.5f * (l2 - r2),   // e24
+		0.5f * (r1 - l1),   // e34
+		0.5f * (l0 - r0));  // e1234
+}
+
+/// Exponential of a pure-imaginary quaternion whose (x, y, z) sit in lanes (Y, Z, W):
+/// exp(0, v) = (cos|v|, sin|v|/|v| * v)
+JPH_INLINE Lane4 sQuatExp(Lane4Arg inImag)
+{
+	float x = inImag.GetY(), y = inImag.GetZ(), z = inImag.GetW();
+	float angle = sqrt(x * x + y * y + z * z);
+	float c = Cos(angle);
+	float k = angle > 1.0e-9f? Sin(angle) / angle : 1.0f; // -> 1 as angle -> 0
+	return Lane4(c, k * x, k * y, k * z);
+}
+
+/// Logarithm of a unit quaternion q = (w, x, y, z): the imaginary part (0, angle/|v| * v)
+JPH_INLINE Lane4 sQuatLog(Lane4Arg inQuat)
+{
+	float x = inQuat.GetY(), y = inQuat.GetZ(), z = inQuat.GetW();
+	float v_len = sqrt(x * x + y * y + z * z);
+	float angle = atan2(v_len, inQuat.GetX());
+	float k = v_len > 1.0e-9f? angle / v_len : 1.0f;
+	return Lane4(0.0f, k * x, k * y, k * z);
+}
+
+} // namespace RotorImpl
 
 Rotor Rotor::sRotation(Vec4Arg inPlaneA, Vec4Arg inPlaneB, float inAngle)
 {
@@ -115,10 +171,50 @@ Rotor Rotor::Inversed() const
 	return Rotor(rev.mValue * inv_len_sq);
 }
 
+bool Rotor::IsNormalized(float inTolerance) const
+{
+	Lane4 ql, qr;
+	RotorImpl::sToQuats(mValue, ql, qr);
+	// Both SU(2) factors must be unit length (this also implies the 8-vector has length 1)
+	return abs(ql.LengthSq() - 1.0f) <= 2.0f * inTolerance
+		&& abs(qr.LengthSq() - 1.0f) <= 2.0f * inTolerance;
+}
+
+Rotor Rotor::Normalized() const
+{
+	Lane4 ql, qr;
+	RotorImpl::sToQuats(mValue, ql, qr);
+	float ll = ql.Length(), lr = qr.Length();
+	JPH_ASSERT(ll > 0.0f && lr > 0.0f);
+	return RotorImpl::sFromQuats(ql * (1.0f / ll), qr * (1.0f / lr));
+}
+
+Rotor Rotor::sExp(BivecArg inBivector)
+{
+	// Split the bivector into its two SU(2) parts and exponentiate each like a quaternion.
+	// Build the bivector in Rotor lane layout [s, e12, e13, e14, e23, e24, e34, e1234] with s=p=0.
+	Vec8 b(0.0f, inBivector.GetE12(), inBivector.GetE13(), inBivector.GetE14(),
+		   inBivector.GetE23(), inBivector.GetE24(), inBivector.GetE34(), 0.0f);
+	Lane4 vl, vr;
+	RotorImpl::sToQuats(b, vl, vr); // pure-imaginary: the real (X) lane is 0 for a bivector
+	return RotorImpl::sFromQuats(RotorImpl::sQuatExp(vl), RotorImpl::sQuatExp(vr));
+}
+
+Bivec Rotor::Log() const
+{
+	JPH_ASSERT(IsNormalized());
+	Lane4 ql, qr;
+	RotorImpl::sToQuats(mValue, ql, qr);
+	// Log of each factor is pure imaginary; reconstruct gives a rotor with s = p = 0, i.e. a bivector
+	Rotor b = RotorImpl::sFromQuats(RotorImpl::sQuatLog(ql), RotorImpl::sQuatLog(qr));
+	return Bivec(b.GetE12(), b.GetE13(), b.GetE14(), b.GetE23(), b.GetE24(), b.GetE34());
+}
+
 Rotor Rotor::LERP(RotorArg inDestination, float inFraction) const
 {
+	// Blend then project back onto Spin(4) so the result is a valid rotor
 	float scale0 = 1.0f - inFraction;
-	return Rotor(mValue * scale0 + inDestination.mValue * inFraction);
+	return Rotor(mValue * scale0 + inDestination.mValue * inFraction).Normalized();
 }
 
 Rotor Rotor::SLERP(RotorArg inDestination, float inFraction) const

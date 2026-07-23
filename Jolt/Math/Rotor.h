@@ -7,6 +7,9 @@
 #include <Jolt/Math/Vec4.h>
 #include <Jolt/Math/Vec8.h>
 
+/// Rotor::sExp / Rotor::Log (general 4D exponential / logarithm) are available.
+#define JPH_ROTOR_HAS_EXP_LOG
+
 JPH_NAMESPACE_BEGIN
 
 /// Rotor class for 4D rotations using Clifford algebra Cl(4,0).
@@ -57,8 +60,9 @@ public:
 	/// If this rotor is close to inRHS
 	inline bool					IsClose(RotorArg inRHS, float inMaxDistSq = 1.0e-12f) const		{ return mValue.IsClose(inRHS.mValue, inMaxDistSq); }
 
-	/// If the length of this rotor is 1 +/- inTolerance
-	inline bool					IsNormalized(float inTolerance = 1.0e-5f) const					{ return mValue.IsNormalized(inTolerance); }
+	/// If this rotor is a valid unit rotor of Spin(4). Length 1 alone is not enough: R*~R must
+	/// equal 1 with no e1234 defect, i.e. both SU(2) factors (see Normalized) must be unit length.
+	inline bool					IsNormalized(float inTolerance = 1.0e-5f) const;
 
 	/// If any component of this rotor is a NaN
 	inline bool					IsNaN() const													{ return mValue.IsNaN(); }
@@ -121,8 +125,11 @@ public:
 	/// Length of rotor
 	JPH_INLINE float			Length() const													{ return mValue.Length(); }
 
-	/// Normalize the rotor
-	JPH_INLINE Rotor			Normalized() const												{ return Rotor(mValue.Normalized()); }
+	/// Normalize the rotor by projecting it back onto Spin(4). Because Spin(4) = SU(2)xSU(2)
+	/// (split by the central pseudoscalar I = e1234 into P+- = (1 +- I)/2), a valid rotor is a pair
+	/// of unit quaternions; this normalizes each SU(2) factor independently. That removes the
+	/// e1234 defect that a plain 8-vector normalization leaves behind.
+	JPH_INLINE Rotor			Normalized() const;
 
 	///@}
 	///@name Arithmetic
@@ -161,6 +168,16 @@ public:
 
 	/// Get inverse rotor: ~R / |R|^2
 	JPH_INLINE Rotor			Inversed() const;
+
+	/// Exponential map of a bivector: the unit rotor exp(B). Correct for general 4D rotations
+	/// (double / isoclinic), not just simple ones: B is split by the pseudoscalar into its two
+	/// SU(2) parts and each exponentiates like a quaternion, so exp picks up the e1234 term that
+	/// the single-plane formula cos|B| + sin|B| B/|B| cannot represent.
+	static JPH_INLINE Rotor		sExp(BivecArg inBivector);
+
+	/// Logarithm map: the bivector B (principal branch) such that sExp(B) == *this, up to the
+	/// rotor double cover. Inverse of sExp. *this must be a unit rotor.
+	JPH_INLINE Bivec			Log() const;
 
 	/// Linear interpolation between two rotors
 	JPH_INLINE Rotor			LERP(RotorArg inDestination, float inFraction) const;

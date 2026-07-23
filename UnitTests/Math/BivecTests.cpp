@@ -104,12 +104,10 @@ TEST_SUITE("BivecTests")
 		CHECK(Bivec::sZero().IsNearZero());
 	}
 
-	// EXPECTED TO FAIL until CLAUDE.md P1 bug #10 is fixed:
-	// Bivec::sAnd type-puns a float[8] through a uint32* and mutates it, then reads the floats
-	// back. That is strict-aliasing UB, and at the project's real -O3 -flto optimization level it
-	// produces a wrong result: sAnd returns its first argument unmodified (verified: this case
-	// passes under -fno-strict-aliasing and fails with strict aliasing on). Fix with memcpy or a
-	// Vec8 logic op, not a reinterpret_cast.
+	// Regression test for CLAUDE.md P1 bug #10: Bivec::sAnd used to type-pun a float[8] through a
+	// uint32* and mutate it in place, which is strict-aliasing UB and was miscompiled at -O2/-O3
+	// (sAnd returned its first argument unmodified). The memcpy-based implementation masks per
+	// component correctly.
 	TEST_CASE("TestBivecSAnd")
 	{
 		float all_bits;

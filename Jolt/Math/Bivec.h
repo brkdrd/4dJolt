@@ -112,19 +112,24 @@ public:
 	///@{
 
 	/// Bitwise AND (for masking with DOF flags)
+	/// When a mask component = 0xffffffff (as float bits), result = inV1 component; when the mask
+	/// component = 0x00000000, result = 0.
 	JPH_INLINE static Bivec		sAnd(const Bivec &inV1, const Bivec &inV2)
 	{
-		// Component-wise: use float reinterpretation trick
-		// When mask component = 0xffffffff (as float), result = inV1 component
-		// When mask component = 0x00000000, result = 0
-		Float8 f1, f2;
+		// Bit-and per component through memcpy. A reinterpret_cast<uint32 *>(float *) here is
+		// strict-aliasing UB and is miscompiled at -O2/-O3 (the masked write is dropped).
+		Float8 f1, f2, out;
 		inV1.mValue.StoreFloat8(&f1);
 		inV2.mValue.StoreFloat8(&f2);
-		uint32 *a = reinterpret_cast<uint32 *>(f1.mValue);
-		uint32 *b = reinterpret_cast<uint32 *>(f2.mValue);
 		for (int i = 0; i < 8; ++i)
-			a[i] &= b[i];
-		return Bivec(Float8(f1));
+		{
+			uint32 a, b;
+			memcpy(&a, &f1.mValue[i], sizeof(uint32));
+			memcpy(&b, &f2.mValue[i], sizeof(uint32));
+			uint32 r = a & b;
+			memcpy(&out.mValue[i], &r, sizeof(uint32));
+		}
+		return Bivec(out);
 	}
 
 	///@}

@@ -259,22 +259,25 @@ TEST_SUITE("RotorTests")
 		}
 	}
 
-	// EXPECTED TO FAIL until CLAUDE.md P0 bug #2 is fixed:
-	// Rotor::IsNormalized only checks the 8-vector length. A unit length rotor with a nonzero
-	// e1234 defect (R ~R = a + b e1234, b != 0) is NOT a rotation, and IsNormalized must reject it.
+	// IsNormalized must check both rotor constraints, not just the 8-vector length: a unit-length
+	// rotor with a nonzero e1234 defect (R ~R = a + b e1234, b != 0) is NOT a rotation.
 	TEST_CASE("TestRotorIsNormalizedDetectsDefect")
 	{
-		// Unit length, but R ~R = 1 + 0.8 e1234: not an element of Spin(4)
-		Rotor defective = Rotor(1, 0, 0, 0, 0, 0, 0, 0.5f).Normalized();
+		// s = p = 1/sqrt(2): 8-vector length is exactly 1, but R ~R = 1 + e1234 (defect 2sp = 1),
+		// i.e. |qL|^2 = (s+p)^2 = 2 and |qR|^2 = (s-p)^2 = 0 -- not an element of Spin(4).
+		const float k = 1.0f / sqrt(2.0f);
+		Rotor defective(k, 0, 0, 0, 0, 0, 0, k);
 		CHECK_APPROX_EQUAL(defective.Length(), 1.0f, 1.0e-5f);
 		CHECK(abs(Cl4Ref::RotorNormDefect(defective)) > 0.1); // shows the defect is real
 		CHECK(!defective.IsNormalized());
+
+		// A genuine unit rotor passes
+		CHECK(Rotor::sRotation(Vec4::sAxisX(), Vec4::sAxisY(), 0.7f).IsNormalized());
 	}
 
-	// EXPECTED TO FAIL until CLAUDE.md P0 bug #2 is fixed:
-	// Normalized() must project back onto the rotor manifold (both constraints of R ~R = 1),
-	// not just rescale the 8-vector. Composition drift makes this the difference between a
-	// stable and a slowly exploding simulation.
+	// Normalized() must project back onto the rotor manifold (both constraints of R ~R = 1), not
+	// just rescale the 8-vector. Composition drift makes this the difference between a stable and a
+	// slowly exploding simulation.
 	TEST_CASE("TestRotorNormalizedRemovesDefect")
 	{
 		UnitTestRandom random(11223);
@@ -289,8 +292,7 @@ TEST_SUITE("RotorTests")
 		}
 	}
 
-	// EXPECTED TO FAIL until CLAUDE.md P0 bug #2 is fixed:
-	// LERP currently returns the raw linear blend, which is neither unit length nor defect free.
+	// LERP must return a valid rotor (unit length AND defect free), not the raw linear blend.
 	TEST_CASE("TestRotorLERPReturnsValidRotor")
 	{
 		UnitTestRandom random(22334);
@@ -324,10 +326,10 @@ TEST_SUITE("RotorTests")
 		Rotor b = Rotor::sRotation(Vec4::sAxisX(), Vec4::sAxisY(), 1.0f);
 		CHECK(a.SLERP(b, 0.5f).IsClose(Rotor::sRotation(Vec4::sAxisX(), Vec4::sAxisY(), 0.5f), 1.0e-8f));
 
-		// EXPECTED TO FAIL until CLAUDE.md P0 bugs #1/#2 are fixed:
-		// SLERP between rotors that differ by a double rotation must stay on the rotor manifold.
-		// A linear-combination style SLERP leaves Spin(4) (nonzero defect at the midpoint);
-		// the correct geodesic is r1 * exp(t * log(~r1 * r2)), which needs the general exp/log.
+		// SLERP between rotors that differ by a double rotation must stay on the rotor manifold
+		// (the defect-aware Normalized keeps the midpoint on Spin(4)). NOTE: this only checks
+		// validity, not geodesic optimality; a fully correct 4D slerp would interpolate each SU(2)
+		// factor via r1 * sExp(t * (~r1 * r2).Log()).
 		Rotor identity = Rotor::sIdentity();
 		Rotor iso = Rotor::sDoubleRotation(Vec4::sAxisX(), Vec4::sAxisY(), 1.2f, Vec4::sAxisZ(), Vec4::sAxisW(), 0.9f);
 		Rotor mid = identity.SLERP(iso, 0.5f);
@@ -336,14 +338,15 @@ TEST_SUITE("RotorTests")
 	}
 
 #ifdef JPH_ROTOR_HAS_EXP_LOG
-	// Test-first for CLAUDE.md P0 bug #1 / Phase A step 3: enable this block (and delete the macro
-	// guard) when Rotor::sExp(BivecArg) / Rotor::Log() land. The current exp map inlined in
-	// Body::AddRotationStep only handles simple bivectors (it hardcodes the pseudoscalar to 0),
-	// which integrates any double rotation incorrectly.
+	// Rotor::sExp / Rotor::Log (general 4D exponential/logarithm, CLAUDE.md P0 bug #1). Unlike the
+	// old inlined map in Body::AddRotationStep (which hardcoded the pseudoscalar to 0 and only
+	// handled simple bivectors), sExp is correct for double/isoclinic rotations.
 	TEST_CASE("TestRotorExpLog")
 	{
 		UnitTestRandom random(44556);
-		uniform_real_distribution<float> dist(-1.0f, 1.0f);
+		// Keep both SU(2) angles |vL|, |vR| < pi (|v| <= sqrt(3)*2*0.6 ~ 2.08) so Log stays on the
+		// principal branch; exp-vs-reference below is valid for any bivector regardless of range.
+		uniform_real_distribution<float> dist(-0.6f, 0.6f);
 		for (int n = 0; n < 50; ++n)
 		{
 			// Generic bivector: generally a double rotation, exp has a nonzero pseudoscalar part
@@ -355,9 +358,16 @@ TEST_SUITE("RotorTests")
 			CHECK_APPROX_EQUAL(float(Cl4Ref::RotorNormScalar(r)), 1.0f, 1.0e-4f);
 			CHECK_APPROX_EQUAL(float(Cl4Ref::RotorNormDefect(r)), 0.0f, 1.0e-4f);
 
-			// log is the inverse (principal branch: |angles| < pi for the bivectors above)
+			// log is the inverse on the principal branch
 			Bivec back = r.Log();
 			CHECK(Cl4Ref::FromBivec(back).MaxAbsDiff(Cl4Ref::FromBivec(b)) < 1.0e-3);
+		}
+
+		// exp(log(r)) round-trips exactly for any valid rotor, regardless of branch
+		for (int n = 0; n < 20; ++n)
+		{
+			Rotor r = sRandomRotor(random);
+			CHECK(Rotor::sExp(r.Log()).IsClose(r, 1.0e-4f));
 		}
 
 		// Simple bivector: must reduce to the quaternion-like formula
