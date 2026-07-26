@@ -26,11 +26,11 @@ JPH_NAMESPACE_BEGIN
 ///
 /// - Start with a simplex of the Minkowski sum (difference) of two objects that was calculated by GJK
 /// - This simplex should contain the origin (or else GJK would have reported: no collision)
-/// - In cases where the simplex consists of 1 - 3 points, find some extra support points (of the Minkowski sum) to get to at least 4 points
-/// - Convert this into a convex hull with non-zero volume (which includes the origin)
-/// - A: Calculate the closest point to the origin for all triangles of the hull and take the closest one
+/// - In cases where the simplex consists of 1 - 4 points, find extra support points (of the Minkowski sum) to get to 5 points
+/// - Convert this into a convex hull (pentachoron) with non-zero hypervolume (which includes the origin)
+/// - A: Calculate the closest point to the origin for all tetrahedral cells of the hull and take the closest one
 /// - Calculate a new support point (of the Minkowski sum) in this direction and add this point to the convex hull
-/// - This will remove all faces that are facing the new point and will create new triangles to fill up the hole
+/// - This will remove all cells that are facing the new point and will create new cells to fill up the hole
 /// - Loop to A until no closer point found
 /// - The closest point indicates the position / direction of least penetration
 class EPAPenetrationDepth
@@ -58,17 +58,17 @@ private:
 	public:
 		/// List of support points
 		Points			mY;
-		Vec3			mP[cMaxPoints];
-		Vec3			mQ[cMaxPoints];
+		Vec4			mP[cMaxPoints];
+		Vec4			mQ[cMaxPoints];
 
 		/// Calculate and add new support point to the list of points
 		template <typename A, typename B>
-		Vec3			Add(const A &inA, const B &inB, Vec3Arg inDirection, int &outIndex)
+		Vec4			Add(const A &inA, const B &inB, Vec4Arg inDirection, int &outIndex)
 		{
 			// Get support point of the minkowski sum A - B
-			Vec3 p = inA.GetSupport(inDirection);
-			Vec3 q = inB.GetSupport(-inDirection);
-			Vec3 w = p - q;
+			Vec4 p = inA.GetSupport(inDirection);
+			Vec4 q = inB.GetSupport(-inDirection);
+			Vec4 w = p - q;
 
 			// Store new point
 			outIndex = mY.size();
@@ -101,7 +101,7 @@ public:
 	/// @param outPointB Position on B that has the least amount of penetration.
 	/// Use |outPointB - outPointA| to get the distance of penetration.
 	template <typename AE, typename BE>
-	EStatus				GetPenetrationDepthStepGJK(const AE &inAExcludingConvexRadius, float inConvexRadiusA, const BE &inBExcludingConvexRadius, float inConvexRadiusB, float inTolerance, Vec3 &ioV, Vec3 &outPointA, Vec3 &outPointB)
+	EStatus				GetPenetrationDepthStepGJK(const AE &inAExcludingConvexRadius, float inConvexRadiusA, const BE &inBExcludingConvexRadius, float inConvexRadiusB, float inTolerance, Vec4 &ioV, Vec4 &outPointA, Vec4 &outPointB)
 	{
 		JPH_IF_ENABLE_ASSERTS(mGJKTolerance = inTolerance;)
 
@@ -146,7 +146,7 @@ public:
 	/// @return False if the objects don't collide, in this case outPointA/outPointB are invalid.
 	/// True if the objects penetrate
 	template <typename AI, typename BI>
-	bool				GetPenetrationDepthStepEPA(const AI &inAIncludingConvexRadius, const BI &inBIncludingConvexRadius, float inTolerance, Vec3 &outV, Vec3 &outPointA, Vec3 &outPointB)
+	bool				GetPenetrationDepthStepEPA(const AI &inAIncludingConvexRadius, const BI &inBIncludingConvexRadius, float inTolerance, Vec4 &outV, Vec4 &outPointA, Vec4 &outPointB)
 	{
 		JPH_PROFILE_FUNCTION();
 
@@ -157,7 +157,7 @@ public:
 		SupportPoints support_points;
 		mGJK.GetClosestPointsSimplex(support_points.mY.data(), support_points.mP, support_points.mQ, support_points.mY.GetSizeRef());
 
-		// Fill up the amount of support points to 4
+		// Fill up the amount of support points to 5 (need a pentachoron in 4D)
 		switch (support_points.mY.size())
 		{
 		case 1:
@@ -166,27 +166,30 @@ public:
 				JPH_ASSERT(support_points.mY[0].IsNearZero(Square(mGJKTolerance)));
 				support_points.mY.pop_back();
 
-				// Add support points in 4 directions to form a tetrahedron around the origin
-				int p1, p2, p3, p4;
-				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec3(0, 1, 0), p1);
-				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec3(-1, -1, -1), p2);
-				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec3(1, -1, -1), p3);
-				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec3(0, -1, 1), p4);
+				// Add support points in 5 spread-out 4D directions to form an initial pentachoron around the origin
+				int p1, p2, p3, p4, p5;
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec4( 1,  0,  0,  0), p1);
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec4( 0,  1,  0,  0), p2);
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec4( 0,  0,  1,  0), p3);
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec4( 0,  0,  0,  1), p4);
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, Vec4(-1, -1, -1, -1), p5);
 				JPH_ASSERT(p1 == 0);
 				JPH_ASSERT(p2 == 1);
 				JPH_ASSERT(p3 == 2);
 				JPH_ASSERT(p4 == 3);
+				JPH_ASSERT(p5 == 4);
 				break;
 			}
 
 		case 2:
 			{
-				// Two vertices, create 3 extra by taking perpendicular axis and rotating it around in 120 degree increments
-				Vec3 axis = (support_points.mY[1] - support_points.mY[0]).Normalized();
-				Mat44 rotation = Mat44::sRotation(axis, DegreesToRadians(120.0f));
-				Vec3 dir1 = axis.GetNormalizedPerpendicular();
-				Vec3 dir2 = rotation * dir1;
-				Vec3 dir3 = rotation * dir2;
+				// Two vertices, create 3 extra perpendicular directions using 4D cross products
+				Vec4 axis = (support_points.mY[1] - support_points.mY[0]).Normalized();
+				Vec4 dir1 = axis.GetNormalizedPerpendicular();
+				Vec4 dir2 = Vec4::sCross(axis, dir1, Vec4(0, 0, 0, 1)).Normalized();
+				// If dir2 is zero (axis is parallel to w), try another vector
+				if (dir2.IsNearZero()) dir2 = Vec4::sCross(axis, dir1, Vec4(1, 0, 0, 0)).Normalized();
+				Vec4 dir3 = Vec4::sCross(axis, dir1, dir2).Normalized();
 				int p1, p2, p3;
 				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, dir1, p1);
 				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, dir2, p2);
@@ -198,13 +201,44 @@ public:
 			}
 
 		case 3:
+			{
+				// 3 vertices (triangle). In 4D the normal space of a triangle is 2D, so add 2 perpendicular directions.
+				Vec4 e0 = support_points.mY[1] - support_points.mY[0];
+				Vec4 e1 = support_points.mY[2] - support_points.mY[0];
+				Vec4 dir1 = Vec4::sCross(e0, e1, Vec4(0, 0, 0, 1));
+				if (dir1.IsNearZero()) dir1 = Vec4::sCross(e0, e1, Vec4(1, 0, 0, 0));
+				dir1 = dir1.Normalized();
+				Vec4 dir2 = Vec4::sCross(e0, e1, dir1).Normalized();
+				int p1, p2;
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, dir1, p1);
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, dir2, p2);
+				JPH_ASSERT(p1 == 3);
+				JPH_ASSERT(p2 == 4);
+				break;
+			}
+
 		case 4:
-			// We already have enough points
+			{
+				// 4 vertices (tetrahedron). In 4D the normal space is 1D, add 1 hyperplane normal direction.
+				Vec4 e0 = support_points.mY[1] - support_points.mY[0];
+				Vec4 e1 = support_points.mY[2] - support_points.mY[0];
+				Vec4 e2 = support_points.mY[3] - support_points.mY[0];
+				Vec4 normal = Vec4::sCross(e0, e1, e2);
+				if (normal.IsNearZero()) normal = Vec4(0, 0, 0, 1); // Degenerate fallback
+				normal = normal.Normalized();
+				int p1;
+				(void)support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, normal, p1);
+				JPH_ASSERT(p1 == 4);
+				break;
+			}
+
+		case 5:
+			// Full pentachoron from GJK, already have enough points
 			break;
 		}
 
-		// Create hull out of the initial points
-		JPH_ASSERT(support_points.mY.size() >= 3);
+		// Create hull out of the initial points (need at least 5 for a pentachoron in 4D)
+		JPH_ASSERT(support_points.mY.size() >= 5);
 		EPAConvexHullBuilder hull(support_points.mY);
 #ifdef JPH_EPA_CONVEX_BUILDER_DRAW
 		hull.DrawLabel("Build initial hull");
@@ -212,8 +246,8 @@ public:
 #ifdef JPH_EPA_PENETRATION_DEPTH_DEBUG
 		Trace("Init: num_points = %u", (uint)support_points.mY.size());
 #endif
-		hull.Initialize(0, 1, 2);
-		for (typename Points::size_type i = 3; i < support_points.mY.size(); ++i)
+		hull.Initialize(0, 1, 2, 3, 4);
+		for (typename Points::size_type i = 5; i < support_points.mY.size(); ++i)
 		{
 			float dist_sq;
 			Triangle *t = hull.FindFacingTriangle(support_points.mY[i], dist_sq);
@@ -234,7 +268,7 @@ public:
 
 		// Generate the hull of the Minkowski difference for visualization
 		MinkowskiDifference diff(inAIncludingConvexRadius, inBIncludingConvexRadius);
-		DebugRenderer::GeometryRef geometry = DebugRenderer::sInstance->CreateTriangleGeometryForConvex([&diff](Vec3Arg inDirection) { return diff.GetSupport(inDirection); });
+		DebugRenderer::GeometryRef geometry = DebugRenderer::sInstance->CreateTriangleGeometryForConvex([&diff](Vec4Arg inDirection) { return diff.GetSupport(inDirection); });
 		hull.DrawGeometry(geometry, Color::sYellow);
 
 		hull.DrawLabel("Ensure origin in hull");
@@ -267,11 +301,11 @@ public:
 			hull.DrawLabel("Next iteration");
 #endif
 #ifdef JPH_EPA_PENETRATION_DEPTH_DEBUG
-			Trace("EncapsulateOrigin: verts = (%d, %d, %d), closest_dist_sq = %g, centroid = (%g, %g, %g), normal = (%g, %g, %g)",
-				t->mEdge[0].mStartIdx, t->mEdge[1].mStartIdx, t->mEdge[2].mStartIdx,
+			Trace("EncapsulateOrigin: verts = (%d, %d, %d, %d), closest_dist_sq = %g, centroid = (%g, %g, %g, %g), normal = (%g, %g, %g, %g)",
+				t->mIdx[0], t->mIdx[1], t->mIdx[2], t->mIdx[3],
 				t->mClosestLenSq,
-				t->mCentroid.GetX(), t->mCentroid.GetY(), t->mCentroid.GetZ(),
-				t->mNormal.GetX(), t->mNormal.GetY(), t->mNormal.GetZ());
+				t->mCentroid.GetX(), t->mCentroid.GetY(), t->mCentroid.GetZ(), t->mCentroid.GetW(),
+				t->mNormal.GetX(), t->mNormal.GetY(), t->mNormal.GetZ(), t->mNormal.GetW());
 #endif
 
 			// Remove the triangle from the queue before we start adding new ones (which may result in a new closest triangle at the front of the queue)
@@ -279,7 +313,7 @@ public:
 
 			// Add a support point to get the origin inside the hull
 			int new_index;
-			Vec3 w = support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, t->mNormal, new_index);
+			Vec4 w = support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, t->mNormal, new_index);
 
 #ifdef JPH_EPA_CONVEX_BUILDER_DRAW
 			// Draw the point that we're adding
@@ -332,11 +366,11 @@ public:
 			hull.DrawLabel("Next iteration");
 #endif
 #ifdef JPH_EPA_PENETRATION_DEPTH_DEBUG
-			Trace("FindClosest: verts = (%d, %d, %d), closest_len_sq = %g, centroid = (%g, %g, %g), normal = (%g, %g, %g)",
-				t->mEdge[0].mStartIdx, t->mEdge[1].mStartIdx, t->mEdge[2].mStartIdx,
+			Trace("FindClosest: verts = (%d, %d, %d, %d), closest_len_sq = %g, centroid = (%g, %g, %g, %g), normal = (%g, %g, %g, %g)",
+				t->mIdx[0], t->mIdx[1], t->mIdx[2], t->mIdx[3],
 				t->mClosestLenSq,
-				t->mCentroid.GetX(), t->mCentroid.GetY(), t->mCentroid.GetZ(),
-				t->mNormal.GetX(), t->mNormal.GetY(), t->mNormal.GetZ());
+				t->mCentroid.GetX(), t->mCentroid.GetY(), t->mCentroid.GetZ(), t->mCentroid.GetW(),
+				t->mNormal.GetX(), t->mNormal.GetY(), t->mNormal.GetZ(), t->mNormal.GetW());
 #endif
 			// Check if next triangle is further away than closest point, we've found the closest point
 			if (t->mClosestLenSq >= closest_dist_sq)
@@ -351,7 +385,7 @@ public:
 			// Note that the article uses the closest point between the origin and plane, but this always has the exact same direction as the normal (if the origin is behind the plane)
 			// and this way we do less calculations and lose less precision
 			int new_index;
-			Vec3 w = support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, t->mNormal, new_index);
+			Vec4 w = support_points.Add(inAIncludingConvexRadius, inBIncludingConvexRadius, t->mNormal, new_index);
 
 			// Project w onto the triangle normal
 			float dot = t->mNormal.Dot(w);
@@ -365,8 +399,8 @@ public:
 			float dist_sq = Square(dot) / t->mNormal.LengthSq();
 
 #ifdef JPH_EPA_PENETRATION_DEPTH_DEBUG
-			Trace("FindClosest: w = (%g, %g, %g), dot = %g, dist_sq = %g",
-				w.GetX(), w.GetY(), w.GetZ(),
+			Trace("FindClosest: w = (%g, %g, %g, %g), dot = %g, dist_sq = %g",
+				w.GetX(), w.GetY(), w.GetZ(), w.GetW(),
 				dot, dist_sq);
 #endif
 #ifdef JPH_EPA_CONVEX_BUILDER_DRAW
@@ -423,7 +457,7 @@ public:
 				// When the hull has defects it is possible that the origin has been classified on the wrong side of the triangle
 				// so we do an additional check to see if the penetration in the -triangle normal direction is smaller than
 				// the penetration in the triangle normal direction. If so we must flip the sign of the penetration depth.
-				Vec3 w2 = inAIncludingConvexRadius.GetSupport(-t->mNormal) - inBIncludingConvexRadius.GetSupport(t->mNormal);
+				Vec4 w2 = inAIncludingConvexRadius.GetSupport(-t->mNormal) - inBIncludingConvexRadius.GetSupport(t->mNormal);
 				float dot2 = -t->mNormal.Dot(w2);
 				if (dot2 < dot)
 					flip_v_sign = true;
@@ -439,7 +473,7 @@ public:
 #ifdef JPH_EPA_CONVEX_BUILDER_DRAW
 		hull.DrawLabel("Closest found");
 		hull.DrawWireTriangle(*last, Color::sWhite);
-		hull.DrawArrow(last->mCentroid, last->mCentroid + last->mNormal.NormalizedOr(Vec3::sZero()), Color::sWhite, 0.1f);
+		hull.DrawArrow(last->mCentroid, last->mCentroid + last->mNormal.NormalizedOr(Vec4::sZero()), Color::sWhite, 0.1f);
 		hull.DrawState();
 #endif
 
@@ -456,25 +490,27 @@ public:
 			outV = -outV;
 
 		// Use the barycentric coordinates for the closest point to the origin to find the contact points on A and B
-		Vec3 p0 = support_points.mP[last->mEdge[0].mStartIdx];
-		Vec3 p1 = support_points.mP[last->mEdge[1].mStartIdx];
-		Vec3 p2 = support_points.mP[last->mEdge[2].mStartIdx];
+		Vec4 p0 = support_points.mP[last->mIdx[0]];
+		Vec4 p1 = support_points.mP[last->mIdx[1]];
+		Vec4 p2 = support_points.mP[last->mIdx[2]];
+		Vec4 p3 = support_points.mP[last->mIdx[3]];
 
-		Vec3 q0 = support_points.mQ[last->mEdge[0].mStartIdx];
-		Vec3 q1 = support_points.mQ[last->mEdge[1].mStartIdx];
-		Vec3 q2 = support_points.mQ[last->mEdge[2].mStartIdx];
+		Vec4 q0 = support_points.mQ[last->mIdx[0]];
+		Vec4 q1 = support_points.mQ[last->mIdx[1]];
+		Vec4 q2 = support_points.mQ[last->mIdx[2]];
+		Vec4 q3 = support_points.mQ[last->mIdx[3]];
 
 		if (last->mLambdaRelativeTo0)
 		{
-			// y0 was the reference vertex
-			outPointA = p0 + last->mLambda[0] * (p1 - p0) + last->mLambda[1] * (p2 - p0);
-			outPointB = q0 + last->mLambda[0] * (q1 - q0) + last->mLambda[1] * (q2 - q0);
+			// y0 was the reference vertex, lambdas are coefficients for (y1-y0), (y2-y0), (y3-y0)
+			outPointA = p0 + last->mLambda[0] * (p1 - p0) + last->mLambda[1] * (p2 - p0) + last->mLambda[2] * (p3 - p0);
+			outPointB = q0 + last->mLambda[0] * (q1 - q0) + last->mLambda[1] * (q2 - q0) + last->mLambda[2] * (q3 - q0);
 		}
 		else
 		{
-			// y1 was the reference vertex
-			outPointA = p1 + last->mLambda[0] * (p0 - p1) + last->mLambda[1] * (p2 - p1);
-			outPointB = q1 + last->mLambda[0] * (q0 - q1) + last->mLambda[1] * (q2 - q1);
+			// y1 was the reference vertex, lambdas are coefficients for (y0-y1), (y2-y1), (y3-y1)
+			outPointA = p1 + last->mLambda[0] * (p0 - p1) + last->mLambda[1] * (p2 - p1) + last->mLambda[2] * (p3 - p1);
+			outPointB = q1 + last->mLambda[0] * (q0 - q1) + last->mLambda[1] * (q2 - q1) + last->mLambda[2] * (q3 - q1);
 		}
 
 		return true;
@@ -484,7 +520,7 @@ public:
 	/// Note: less performant since you're providing all support functions in one go
 	/// Note 2: You need to initialize ioV, see documentation at GetPenetrationDepthStepGJK!
 	template <typename AE, typename AI, typename BE, typename BI>
-	bool				GetPenetrationDepth(const AE &inAExcludingConvexRadius, const AI &inAIncludingConvexRadius, float inConvexRadiusA, const BE &inBExcludingConvexRadius, const BI &inBIncludingConvexRadius, float inConvexRadiusB, float inCollisionToleranceSq, float inPenetrationTolerance, Vec3 &ioV, Vec3 &outPointA, Vec3 &outPointB)
+	bool				GetPenetrationDepth(const AE &inAExcludingConvexRadius, const AI &inAIncludingConvexRadius, float inConvexRadiusA, const BE &inBExcludingConvexRadius, const BI &inBIncludingConvexRadius, float inConvexRadiusB, float inCollisionToleranceSq, float inPenetrationTolerance, Vec4 &ioV, Vec4 &outPointA, Vec4 &outPointB)
 	{
 		// Check result of collision detection
 		switch (GetPenetrationDepthStepGJK(inAExcludingConvexRadius, inConvexRadiusA, inBExcludingConvexRadius, inConvexRadiusB, inCollisionToleranceSq, ioV, outPointA, outPointB))
@@ -509,8 +545,8 @@ public:
 	/// @param inDirection Direction of the sweep (ioLambda * inDirection determines length)
 	///	@param inCollisionTolerance The minimal distance between A and B before they are considered colliding
 	/// @param inPenetrationTolerance A factor that determines the accuracy of the result. If the change of the squared distance is less than inTolerance * current_penetration_depth^2 the algorithm will terminate. Should be bigger or equal to FLT_EPSILON.
-	/// @param inA The convex object A, must support the GetSupport(Vec3) function.
-	/// @param inB The convex object B, must support the GetSupport(Vec3) function.
+	/// @param inA The convex object A, must support the GetSupport(Vec4) function.
+	/// @param inB The convex object B, must support the GetSupport(Vec4) function.
 	/// @param inConvexRadiusA The convex radius of A, this will be added on all sides to pad A.
 	/// @param inConvexRadiusB The convex radius of B, this will be added on all sides to pad B.
 	/// @param inReturnDeepestPoint If the shapes are initially intersecting this determines if the EPA algorithm will run to find the deepest point
@@ -521,12 +557,12 @@ public:
 	///
 	/// @return true if the a hit was found, in which case ioLambda, outPointA, outPointB and outSurfaceNormal are updated.
 	template <typename A, typename B>
-	bool				CastShape(Mat44Arg inStart, Vec3Arg inDirection, float inCollisionTolerance, float inPenetrationTolerance, const A &inA, const B &inB, float inConvexRadiusA, float inConvexRadiusB, bool inReturnDeepestPoint, float &ioLambda, Vec3 &outPointA, Vec3 &outPointB, Vec3 &outContactNormal)
+	bool				CastShape(Mat44Arg inStartRotation, Vec4Arg inStartTranslation, Vec4Arg inDirection, float inCollisionTolerance, float inPenetrationTolerance, const A &inA, const B &inB, float inConvexRadiusA, float inConvexRadiusB, bool inReturnDeepestPoint, float &ioLambda, Vec4 &outPointA, Vec4 &outPointB, Vec4 &outContactNormal)
 	{
 		JPH_IF_ENABLE_ASSERTS(mGJKTolerance = inCollisionTolerance;)
 
 		// First determine if there's a collision at all
-		if (!mGJK.CastShape(inStart, inDirection, inCollisionTolerance, inA, inB, inConvexRadiusA, inConvexRadiusB, ioLambda, outPointA, outPointB, outContactNormal))
+		if (!mGJK.CastShape(inStartRotation, inStartTranslation, inDirection, inCollisionTolerance, inA, inB, inConvexRadiusA, inConvexRadiusB, ioLambda, outPointA, outPointB, outContactNormal))
 			return false;
 
 		// When our contact normal is too small, we don't have an accurate result
@@ -540,7 +576,7 @@ public:
 			// If we're initially intersecting, we need to run the EPA algorithm in order to find the deepest contact point
 			AddConvexRadius add_convex_a(inA, inConvexRadiusA);
 			AddConvexRadius add_convex_b(inB, inConvexRadiusB);
-			TransformedConvexObject transformed_a(inStart, add_convex_a);
+			TransformedConvexObject transformed_a(inStartRotation, inStartTranslation, add_convex_a);
 			if (!GetPenetrationDepthStepEPA(transformed_a, add_convex_b, inPenetrationTolerance, outContactNormal, outPointA, outPointB))
 				outContactNormal = inDirection; // Failed to get the deepest point, use points returned by GJK and use cast direction as normal
 		}

@@ -33,7 +33,7 @@ private:
 	/// @return True if new closest point was found.
 	/// False if the function failed, in this case the output variables are not modified
 	template <bool LastPointPartOfClosestFeature>
-	bool		GetClosest(float inPrevVLenSq, Vec3 &outV, float &outVLenSq, uint32 &outSet) const
+	bool		GetClosest(float inPrevVLenSq, Vec4 &outV, float &outVLenSq, uint32 &outSet) const
 	{
 #ifdef JPH_GJK_DEBUG
 		for (int i = 0; i < mNumPoints; ++i)
@@ -41,7 +41,7 @@ private:
 #endif
 
 		uint32 set;
-		Vec3 v;
+		Vec4 v;
 
 		switch (mNumPoints)
 		{
@@ -64,6 +64,11 @@ private:
 		case 4:
 			// Tetrahedron
 			v = ClosestPoint::GetClosestPointOnTetrahedron<LastPointPartOfClosestFeature>(mY[0], mY[1], mY[2], mY[3], set);
+			break;
+
+		case 5:
+			// Pentachoron
+			v = ClosestPoint::GetClosestPointOnPentachoron<LastPointPartOfClosestFeature>(mY[0], mY[1], mY[2], mY[3], mY[4], set);
 			break;
 
 		default:
@@ -157,7 +162,7 @@ private:
 	}
 
 	// Calculate closest points on A and B
-	void		CalculatePointAAndB(Vec3 &outPointA, Vec3 &outPointB) const
+	void		CalculatePointAAndB(Vec4 &outPointA, Vec4 &outPointB) const
 	{
 		switch (mNumPoints)
 		{
@@ -185,6 +190,15 @@ private:
 			break;
 
 		case 4:
+			{
+				float u, v, w, x;
+				ClosestPoint::GetBaryCentricCoordinates(mY[0], mY[1], mY[2], mY[3], u, v, w, x);
+				outPointA = u * mP[0] + v * mP[1] + w * mP[2] + x * mP[3];
+				outPointB = u * mQ[0] + v * mQ[1] + w * mQ[2] + x * mQ[3];
+			}
+			break;
+
+		case 5:
 		#ifdef JPH_DEBUG
 			memset(&outPointA, 0xcd, sizeof(outPointA));
 			memset(&outPointB, 0xcd, sizeof(outPointB));
@@ -196,15 +210,15 @@ private:
 public:
 	/// Test if inA and inB intersect
 	///
-	/// @param inA The convex object A, must support the GetSupport(Vec3) function.
-	/// @param inB The convex object B, must support the GetSupport(Vec3) function.
+	/// @param inA The convex object A, must support the GetSupport(Vec4) function.
+	/// @param inB The convex object B, must support the GetSupport(Vec4) function.
 	///	@param inTolerance Minimal distance between objects when the objects are considered to be colliding
 	///	@param ioV is used as initial separating axis (provide a zero vector if you don't know yet)
 	///
 	///	@return True if they intersect (in which case ioV = (0, 0, 0)).
 	///	False if they don't intersect in which case ioV is a separating axis in the direction from A to B (magnitude is meaningless)
 	template <typename A, typename B>
-	bool		Intersects(const A &inA, const B &inB, float inTolerance, Vec3 &ioV)
+	bool		Intersects(const A &inA, const B &inB, float inTolerance, Vec4 &ioV)
 	{
 		float tolerance_sq = Square(inTolerance);
 
@@ -212,8 +226,8 @@ public:
 		mNumPoints = 0;
 
 #ifdef JPH_GJK_DEBUG
-		for (int i = 0; i < 4; ++i)
-			mY[i] = Vec3::sZero();
+		for (int i = 0; i < 5; ++i)
+			mY[i] = Vec4::sZero();
 #endif
 
 		// Previous length^2 of v
@@ -226,11 +240,11 @@ public:
 #endif
 
 			// Get support points for shape A and B in the direction of v
-			Vec3 p = inA.GetSupport(ioV);
-			Vec3 q = inB.GetSupport(-ioV);
+			Vec4 p = inA.GetSupport(ioV);
+			Vec4 q = inB.GetSupport(-ioV);
 
 			// Get support point of the minkowski sum A - B of v
-			Vec3 w = p - q;
+			Vec4 w = p - q;
 
 			// If the support point sA-B(v) is in the opposite direction as v, then we have found a separating axis and there is no intersection
 			if (ioV.Dot(w) < 0.0f)
@@ -256,13 +270,13 @@ public:
 			if (!GetClosest<true>(prev_v_len_sq, ioV, v_len_sq, set))
 				return false;
 
-			// If there are 4 points, the origin is inside the tetrahedron and we're done
-			if (set == 0xf)
+			// If there are 5 points, the origin is inside the pentachoron and we're done
+			if (set == 0x1f)
 			{
 #ifdef JPH_GJK_DEBUG
 				Trace("Full simplex");
 #endif
-				ioV = Vec3::sZero();
+				ioV = Vec4::sZero();
 				return true;
 			}
 
@@ -272,7 +286,7 @@ public:
 #ifdef JPH_GJK_DEBUG
 				Trace("Distance zero");
 #endif
-				ioV = Vec3::sZero();
+				ioV = Vec4::sZero();
 				return true;
 			}
 
@@ -282,7 +296,7 @@ public:
 #ifdef JPH_GJK_DEBUG
 				Trace("Machine precision reached");
 #endif
-				ioV = Vec3::sZero();
+				ioV = Vec4::sZero();
 				return true;
 			}
 
@@ -309,8 +323,8 @@ public:
 
 	/// Get closest points between inA and inB
 	///
-	/// @param inA The convex object A, must support the GetSupport(Vec3) function.
-	/// @param inB The convex object B, must support the GetSupport(Vec3) function.
+	/// @param inA The convex object A, must support the GetSupport(Vec4) function.
+	/// @param inB The convex object B, must support the GetSupport(Vec4) function.
 	///	@param inTolerance The minimal distance between A and B before the objects are considered colliding and processing is terminated.
 	///	@param inMaxDistSq The maximum squared distance between A and B before the objects are considered infinitely far away and processing is terminated.
 	///	@param ioV Initial guess for the separating axis. Start with any non-zero vector if you don't know.
@@ -324,7 +338,7 @@ public:
 	///
 	///	@return The squared distance between A and B or FLT_MAX when they are further away than inMaxDistSq.
 	template <typename A, typename B>
-	float		GetClosestPoints(const A &inA, const B &inB, float inTolerance, float inMaxDistSq, Vec3 &ioV, Vec3 &outPointA, Vec3 &outPointB)
+	float		GetClosestPoints(const A &inA, const B &inB, float inTolerance, float inMaxDistSq, Vec4 &ioV, Vec4 &outPointA, Vec4 &outPointB)
 	{
 		float tolerance_sq = Square(inTolerance);
 
@@ -334,13 +348,13 @@ public:
 #ifdef JPH_GJK_DEBUG
 		// Generate the hull of the Minkowski difference for visualization
 		MinkowskiDifference diff(inA, inB);
-		mGeometry = DebugRenderer::sInstance->CreateTriangleGeometryForConvex([&diff](Vec3Arg inDirection) { return diff.GetSupport(inDirection); });
+		mGeometry = DebugRenderer::sInstance->CreateTriangleGeometryForConvex([&diff](Vec4Arg inDirection) { return diff.GetSupport(inDirection); });
 
-		for (int i = 0; i < 4; ++i)
+		for (int i = 0; i < 5; ++i)
 		{
-			mY[i] = Vec3::sZero();
-			mP[i] = Vec3::sZero();
-			mQ[i] = Vec3::sZero();
+			mY[i] = Vec4::sZero();
+			mP[i] = Vec4::sZero();
+			mQ[i] = Vec4::sZero();
 		}
 #endif
 
@@ -357,11 +371,11 @@ public:
 #endif
 
 			// Get support points for shape A and B in the direction of v
-			Vec3 p = inA.GetSupport(ioV);
-			Vec3 q = inB.GetSupport(-ioV);
+			Vec4 p = inA.GetSupport(ioV);
+			Vec4 q = inB.GetSupport(-ioV);
 
 			// Get support point of the minkowski sum A - B of v
-			Vec3 w = p - q;
+			Vec4 w = p - q;
 
 			float dot = ioV.Dot(w);
 
@@ -410,13 +424,13 @@ public:
 				break;
 			}
 
-			// If there are 4 points, the origin is inside the tetrahedron and we're done
-			if (set == 0xf)
+			// If there are 5 points, the origin is inside the pentachoron and we're done
+			if (set == 0x1f)
 			{
 #ifdef JPH_GJK_DEBUG
 				Trace("Full simplex");
 #endif
-				ioV = Vec3::sZero();
+				ioV = Vec4::sZero();
 				v_len_sq = 0.0f;
 				break;
 			}
@@ -430,7 +444,7 @@ public:
 #ifdef JPH_GJK_DEBUG
 				Trace("Distance zero");
 #endif
-				ioV = Vec3::sZero();
+				ioV = Vec4::sZero();
 				v_len_sq = 0.0f;
 				break;
 			}
@@ -444,7 +458,7 @@ public:
 #ifdef JPH_GJK_DEBUG
 				Trace("Machine precision reached");
 #endif
-				ioV = Vec3::sZero();
+				ioV = Vec4::sZero();
 				v_len_sq = 0.0f;
 				break;
 			}
@@ -492,9 +506,9 @@ public:
 
 	/// Get the resulting simplex after the GetClosestPoints algorithm finishes.
 	/// If it returned a squared distance of 0, the origin will be contained in the simplex.
-	void		GetClosestPointsSimplex(Vec3 *outY, Vec3 *outP, Vec3 *outQ, uint &outNumPoints) const
+	void		GetClosestPointsSimplex(Vec4 *outY, Vec4 *outP, Vec4 *outQ, uint &outNumPoints) const
 	{
-		uint size = sizeof(Vec3) * mNumPoints;
+		uint size = sizeof(Vec4) * mNumPoints;
 		memcpy(outY, mY, size);
 		memcpy(outP, mP, size);
 		memcpy(outQ, mQ, size);
@@ -508,12 +522,12 @@ public:
 	/// @param inRayOrigin Origin of the ray
 	/// @param inRayDirection Direction of the ray (ioLambda * inDirection determines length)
 	///	@param inTolerance The minimal distance between the ray and A before it is considered colliding
-	/// @param inA A convex object that has the GetSupport(Vec3) function
+	/// @param inA A convex object that has the GetSupport(Vec4) function
 	/// @param ioLambda The max fraction along the ray, on output updated with the actual collision fraction.
 	///
 	///	@return true if a hit was found, ioLambda is the solution for lambda.
 	template <typename A>
-	bool		CastRay(Vec3Arg inRayOrigin, Vec3Arg inRayDirection, float inTolerance, const A &inA, float &ioLambda)
+	bool		CastRay(Vec4Arg inRayOrigin, Vec4Arg inRayDirection, float inTolerance, const A &inA, float &ioLambda)
 	{
 		float tolerance_sq = Square(inTolerance);
 
@@ -521,8 +535,8 @@ public:
 		mNumPoints = 0;
 
 		float lambda = 0.0f;
-		Vec3 x = inRayOrigin;
-		Vec3 v = x - inA.GetSupport(Vec3::sZero());
+		Vec4 x = inRayOrigin;
+		Vec4 v = x - inA.GetSupport(Vec4::sZero());
 		float v_len_sq = FLT_MAX;
 		bool allow_restart = false;
 
@@ -533,8 +547,8 @@ public:
 #endif
 
 			// Get new support point
-			Vec3 p = inA.GetSupport(v);
-			Vec3 w = x - p;
+			Vec4 p = inA.GetSupport(v);
+			Vec4 w = x - p;
 
 #ifdef JPH_GJK_DEBUG
 			Trace("w = [%s]", ConvertToString(w).c_str());
@@ -614,13 +628,13 @@ public:
 				v_len_sq = FLT_MAX;
 				continue;
 			}
-			else if (set == 0xf)
+			else if (set == 0x1f)
 			{
 #ifdef JPH_GJK_DEBUG
 				Trace("Full simplex");
 #endif
 
-				// We're inside the tetrahedron, we have a hit (verify that length of v is 0)
+				// We're inside the pentachoron, we have a hit (verify that length of v is 0)
 				JPH_ASSERT(v_len_sq == 0.0f);
 				break;
 			}
@@ -649,23 +663,24 @@ public:
 	/// @param inStart Start position and orientation of the convex object
 	/// @param inDirection Direction of the sweep (ioLambda * inDirection determines length)
 	///	@param inTolerance The minimal distance between A and B before they are considered colliding
-	/// @param inA The convex object A, must support the GetSupport(Vec3) function.
-	/// @param inB The convex object B, must support the GetSupport(Vec3) function.
+	/// @param inA The convex object A, must support the GetSupport(Vec4) function.
+	/// @param inB The convex object B, must support the GetSupport(Vec4) function.
 	/// @param ioLambda The max fraction along the sweep, on output updated with the actual collision fraction.
 	///
 	/// @return true if a hit was found, ioLambda is the solution for lambda.
 	template <typename A, typename B>
-	bool		CastShape(Mat44Arg inStart, Vec3Arg inDirection, float inTolerance, const A &inA, const B &inB, float &ioLambda)
+	bool		CastShape(Mat44Arg inStartRotation, Vec4Arg inStartTranslation, Vec4Arg inDirection, float inTolerance, const A &inA, const B &inB, float &ioLambda)
 	{
-		// Transform the shape to be cast to the starting position
-		TransformedConvexObject transformed_a(inStart, inA);
+		// Transform the shape to be cast to the starting position (rotation + translation).
+		// Note: in 4D Mat44 is pure rotation, so the start translation is passed separately.
+		TransformedConvexObject transformed_a(inStartRotation, inStartTranslation, inA);
 
 		// Calculate the minkowski difference inB - inA
 		// inA is moving, so we need to add the back side of inB to the front side of inA
 		MinkowskiDifference difference(inB, transformed_a);
 
 		// Do a raycast against the Minkowski difference
-		return CastRay(Vec3::sZero(), inDirection, inTolerance, difference, ioLambda);
+		return CastRay(Vec4::sZero(), inDirection, inTolerance, difference, ioLambda);
 	}
 
 	/// Test if a cast shape inA moving from inStart to lambda * inStart.GetTranslation() + inDirection where lambda e [0, ioLambda> intersects inB
@@ -673,8 +688,8 @@ public:
 	/// @param inStart Start position and orientation of the convex object
 	/// @param inDirection Direction of the sweep (ioLambda * inDirection determines length)
 	///	@param inTolerance The minimal distance between A and B before they are considered colliding
-	/// @param inA The convex object A, must support the GetSupport(Vec3) function.
-	/// @param inB The convex object B, must support the GetSupport(Vec3) function.
+	/// @param inA The convex object A, must support the GetSupport(Vec4) function.
+	/// @param inB The convex object B, must support the GetSupport(Vec4) function.
 	/// @param inConvexRadiusA The convex radius of A, this will be added on all sides to pad A.
 	/// @param inConvexRadiusB The convex radius of B, this will be added on all sides to pad B.
 	/// @param ioLambda The max fraction along the sweep, on output updated with the actual collision fraction.
@@ -686,28 +701,29 @@ public:
 	///
 	///	@return true if a hit was found, ioLambda is the solution for lambda and outPoint and outSeparatingAxis are valid.
 	template <typename A, typename B>
-	bool		CastShape(Mat44Arg inStart, Vec3Arg inDirection, float inTolerance, const A &inA, const B &inB, float inConvexRadiusA, float inConvexRadiusB, float &ioLambda, Vec3 &outPointA, Vec3 &outPointB, Vec3 &outSeparatingAxis)
+	bool		CastShape(Mat44Arg inStartRotation, Vec4Arg inStartTranslation, Vec4Arg inDirection, float inTolerance, const A &inA, const B &inB, float inConvexRadiusA, float inConvexRadiusB, float &ioLambda, Vec4 &outPointA, Vec4 &outPointB, Vec4 &outSeparatingAxis)
 	{
 		float tolerance_sq = Square(inTolerance);
 
 		// Calculate how close A and B (without their convex radius) need to be to each other in order for us to consider this a collision
 		float sum_convex_radius = inConvexRadiusA + inConvexRadiusB;
 
-		// Transform the shape to be cast to the starting position
-		TransformedConvexObject transformed_a(inStart, inA);
+		// Transform the shape to be cast to the starting position (rotation + translation; in 4D
+		// Mat44 is pure rotation, so the start translation is passed separately)
+		TransformedConvexObject transformed_a(inStartRotation, inStartTranslation, inA);
 
 		// Reset state
 		mNumPoints = 0;
 
 		float lambda = 0.0f;
-		Vec3 x = Vec3::sZero(); // Since A is already transformed we can start the cast from zero
-		Vec3 v = -inB.GetSupport(Vec3::sZero()) + transformed_a.GetSupport(Vec3::sZero()); // See CastRay: v = x - inA.GetSupport(Vec3::sZero()) where inA is the Minkowski difference inB - transformed_a (see CastShape above) and x is zero
+		Vec4 x = Vec4::sZero(); // Since A is already transformed we can start the cast from zero
+		Vec4 v = -inB.GetSupport(Vec4::sZero()) + transformed_a.GetSupport(Vec4::sZero()); // See CastRay: v = x - inA.GetSupport(Vec4::sZero()) where inA is the Minkowski difference inB - transformed_a (see CastShape above) and x is zero
 		float v_len_sq = FLT_MAX;
 		bool allow_restart = false;
 
 		// Keeps track of separating axis of the previous iteration.
 		// Initialized at zero as we don't know if our first v is actually a separating axis.
-		Vec3 prev_v = Vec3::sZero();
+		Vec4 prev_v = Vec4::sZero();
 
 		for (;;)
 		{
@@ -718,9 +734,9 @@ public:
 			// Calculate the minkowski difference inB - inA
 			// inA is moving, so we need to add the back side of inB to the front side of inA
 			// Keep the support points on A and B separate so that in the end we can calculate a contact point
-			Vec3 p = transformed_a.GetSupport(-v);
-			Vec3 q = inB.GetSupport(v);
-			Vec3 w = x - (q - p);
+			Vec4 p = transformed_a.GetSupport(-v);
+			Vec4 q = inB.GetSupport(v);
+			Vec4 w = x - (q - p);
 
 #ifdef JPH_GJK_DEBUG
 			Trace("w = [%s]", ConvertToString(w).c_str());
@@ -813,13 +829,13 @@ public:
 				v_len_sq = FLT_MAX;
 				continue;
 			}
-			else if (set == 0xf)
+			else if (set == 0x1f)
 			{
 #ifdef JPH_GJK_DEBUG
 				Trace("Full simplex");
 #endif
 
-				// We're inside the tetrahedron, we have a hit (verify that length of v is 0)
+				// We're inside the pentachoron, we have a hit (verify that length of v is 0)
 				JPH_ASSERT(v_len_sq == 0.0f);
 				break;
 			}
@@ -846,9 +862,10 @@ public:
 			mY[i] = x - (mQ[i] - mP[i]);
 
 		// Calculate the offset we need to apply to A and B to correct for the convex radius
-		Vec3 normalized_v = v.NormalizedOr(Vec3::sZero());
-		Vec3 convex_radius_a = inConvexRadiusA * normalized_v;
-		Vec3 convex_radius_b = inConvexRadiusB * normalized_v;
+		v_len_sq = v.LengthSq();
+		Vec4 normalized_v = v_len_sq > 0.0f ? v / sqrt(v_len_sq) : Vec4::sZero();
+		Vec4 convex_radius_a = inConvexRadiusA * normalized_v;
+		Vec4 convex_radius_b = inConvexRadiusB * normalized_v;
 
 		// Get the contact point
 		// Note that A and B will coincide when lambda > 0. In this case we calculate only B as it is more accurate as it contains less terms.
@@ -869,12 +886,21 @@ public:
 			break;
 
 		case 3:
-		case 4: // A full simplex, we can't properly determine a contact point! As contact point we take the closest point of the previous iteration.
 			{
 				float bu, bv, bw;
 				ClosestPoint::GetBaryCentricCoordinates(mY[0], mY[1], mY[2], bu, bv, bw);
 				outPointB = bu * mQ[0] + bv * mQ[1] + bw * mQ[2] + convex_radius_b;
 				outPointA = lambda > 0.0f? outPointB : bu * mP[0] + bv * mP[1] + bw * mP[2] - convex_radius_a;
+			}
+			break;
+
+		case 4:
+		case 5: // A full simplex, we can't properly determine a contact point! As contact point we take the closest point of the previous iteration.
+			{
+				float bu, bv, bw, bx;
+				ClosestPoint::GetBaryCentricCoordinates(mY[0], mY[1], mY[2], mY[3], bu, bv, bw, bx);
+				outPointB = bu * mQ[0] + bv * mQ[1] + bw * mQ[2] + bx * mQ[3] + convex_radius_b;
+				outPointA = lambda > 0.0f? outPointB : bu * mP[0] + bv * mP[1] + bw * mP[2] + bx * mP[3] - convex_radius_a;
 			}
 			break;
 		}
@@ -905,19 +931,19 @@ private:
 		for (int i = 0; i < mNumPoints; ++i)
 		{
 			// Draw support point
-			RVec3 y_i = origin * mY[i];
+			RVec4 y_i = origin * mY[i];
 			DebugRenderer::sInstance->DrawMarker(y_i, Color::sRed, 1.0f);
 			for (int j = i + 1; j < mNumPoints; ++j)
 			{
 				// Draw edge
-				RVec3 y_j = origin * mY[j];
+				RVec4 y_j = origin * mY[j];
 				DebugRenderer::sInstance->DrawLine(y_i, y_j, Color::sRed);
 				for (int k = j + 1; k < mNumPoints; ++k)
 				{
 					// Make sure triangle faces the origin
-					RVec3 y_k = origin * mY[k];
-					RVec3 center = (y_i + y_j + y_k) / Real(3);
-					RVec3 normal = (y_j - y_i).Cross(y_k - y_i);
+					RVec4 y_k = origin * mY[k];
+					RVec4 center = (y_i + y_j + y_k) / Real(3);
+					RVec4 normal = (y_j - y_i).Cross(y_k - y_i);
 					if (normal.Dot(center) < Real(0))
 						DebugRenderer::sInstance->DrawTriangle(y_i, y_j, y_k, Color::sLightGrey);
 					else
@@ -927,18 +953,18 @@ private:
 		}
 
 		// Offset to the right
-		mOffset += Vec3(mGeometry->mBounds.GetSize().GetX() + 2.0f, 0, 0);
+		mOffset += Vec4(mGeometry->mBounds.GetSize().GetX() + 2.0f, 0, 0, 0);
 	}
 #endif // JPH_GJK_DEBUG
 
-	Vec3		mY[4];						///< Support points on A - B
-	Vec3		mP[4];						///< Support point on A
-	Vec3		mQ[4];						///< Support point on B
+	Vec4		mY[5];						///< Support points on A - B
+	Vec4		mP[5];						///< Support point on A
+	Vec4		mQ[5];						///< Support point on B
 	int			mNumPoints = 0;				///< Number of points in mY, mP and mQ that are valid
 
 #ifdef JPH_GJK_DEBUG
 	DebugRenderer::GeometryRef	mGeometry;	///< A visualization of the minkowski difference for state drawing
-	RVec3		mOffset = RVec3::sZero();	///< Offset to use for state drawing
+	RVec4		mOffset = RVec4::sZero();	///< Offset to use for state drawing
 #endif
 };
 

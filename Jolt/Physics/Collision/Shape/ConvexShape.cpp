@@ -255,13 +255,61 @@ void ConvexShape::CollidePoint(Vec4Arg inPoint, const SubShapeIDCreator &inSubSh
 
 void ConvexShape::sCastConvexVsConvex(const ShapeCast &inShapeCast, const ShapeCastSettings &inShapeCastSettings, const Shape *inShape, Vec4Arg inScale, [[maybe_unused]] const ShapeFilter &inShapeFilter, RMat44Arg inCenterOfMassTransform2, const SubShapeIDCreator &inSubShapeIDCreator1, const SubShapeIDCreator &inSubShapeIDCreator2, CastShapeCollector &ioCollector)
 {
-	// TODO(4D): the convex shape cast needs the geometry GJK/EPA CastShape to carry the start
-	// translation. Currently GJKClosestPoint::CastShape takes a pure-rotation Mat44 start and
-	// constructs TransformedConvexObject(inStart, Vec4::sZero(), ...), so the cast start position is
-	// dropped. Stubbed until that geometry fix lands; the collide path (sCollideConvexVsConvex) and
-	// per-shape CastRay are functional.
-	(void)inShapeCast; (void)inShapeCastSettings; (void)inShape; (void)inScale;
-	(void)inCenterOfMassTransform2; (void)inSubShapeIDCreator1; (void)inSubShapeIDCreator2; (void)ioCollector;
+	JPH_PROFILE_FUNCTION();
+
+	// Only supported for convex shapes
+	JPH_ASSERT(inShapeCast.mShape->GetType() == EShapeType::Convex);
+	const ConvexShape *cast_shape = static_cast<const ConvexShape *>(inShapeCast.mShape);
+
+	JPH_ASSERT(inShape->GetType() == EShapeType::Convex);
+	const ConvexShape *shape = static_cast<const ConvexShape *>(inShape);
+
+	// Determine if we want to use the actual shape or a shrunken shape with convex radius
+	ConvexShape::ESupportMode support_mode = inShapeCastSettings.mUseShrunkenShapeAndConvexRadius? ConvexShape::ESupportMode::ExcludeConvexRadius : ConvexShape::ESupportMode::Default;
+
+	// Create support function for shape to cast
+	SupportBuffer cast_buffer;
+	const Support *cast_support = cast_shape->GetSupportFunction(support_mode, cast_buffer, inShapeCast.mScale);
+
+	// Create support function for target shape
+	SupportBuffer target_buffer;
+	const Support *target_support = shape->GetSupportFunction(support_mode, target_buffer, inScale);
+
+	// Do a raycast against the result. The cast runs in shape 2's local space, so the cast start
+	// transform's rotation (Mat44) and translation (Vec4) are passed to the geometry separately.
+	EPAPenetrationDepth epa;
+	float fraction = ioCollector.GetEarlyOutFraction();
+	Vec4 contact_point_a, contact_point_b, contact_normal;
+	if (epa.CastShape(inShapeCast.mCenterOfMassStart.GetRotation(), sNarrow(inShapeCast.mCenterOfMassStart.GetTranslation()), inShapeCast.mDirection, inShapeCastSettings.mCollisionTolerance, inShapeCastSettings.mPenetrationTolerance, *cast_support, *target_support, cast_support->GetConvexRadius(), target_support->GetConvexRadius(), inShapeCastSettings.mReturnDeepestPoint, fraction, contact_point_a, contact_point_b, contact_normal)
+		&& (inShapeCastSettings.mBackFaceModeConvex == EBackFaceMode::CollideWithBackFaces
+			|| contact_normal.Dot(inShapeCast.mDirection) > 0.0f)) // Test if backfacing
+	{
+		// Convert to world space
+		Vec4 contact_point_a_world = sNarrow(inCenterOfMassTransform2 * contact_point_a);
+		Vec4 contact_point_b_world = sNarrow(inCenterOfMassTransform2 * contact_point_b);
+		Vec4 contact_normal_world = inCenterOfMassTransform2.Multiply3x3(contact_normal);
+
+		ShapeCastResult result(fraction, contact_point_a_world, contact_point_b_world, contact_normal_world, false, inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(), TransformedShape::sGetBodyID(ioCollector.GetContext()));
+
+		// Early out if this hit is deeper than the collector's early out value
+		if (fraction == 0.0f && -result.mPenetrationDepth >= ioCollector.GetEarlyOutFraction())
+			return;
+
+		// Gather faces
+		if (inShapeCastSettings.mCollectFacesMode == ECollectFacesMode::CollectFaces)
+		{
+			// Get supporting face of shape 1 (at the point of contact along the sweep)
+			RMat44 transform_1_to_2 = inShapeCast.mCenterOfMassStart;
+			transform_1_to_2.SetTranslation(transform_1_to_2.GetTranslation() + RVec4(fraction * inShapeCast.mDirection));
+			cast_shape->GetSupportingFace(SubShapeID(), transform_1_to_2.Multiply3x3Transposed(-contact_normal), inShapeCast.mScale, inCenterOfMassTransform2 * transform_1_to_2, result.mShape1Face);
+
+			// Get supporting face of shape 2
+			shape->GetSupportingFace(SubShapeID(), contact_normal, inScale, inCenterOfMassTransform2, result.mShape2Face);
+		}
+
+		JPH_IF_TRACK_NARROWPHASE_STATS(TrackNarrowPhaseCollector track;)
+		ioCollector.AddHit(result);
+	}
 }
 
 void ConvexShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec4Arg inPositionCOM, RotorArg inRotation, Vec4Arg inScale) const
