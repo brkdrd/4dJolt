@@ -262,6 +262,14 @@ P1 — determinism / hygiene:
 
 ## Roadmap to a shippable v1
 
+**⏸ RESUME HERE (2026-07-22):** Phases A, B step 5, and B step 6(a) are done (see the DONE
+lists below). Build is renderer-off, ~2,790 errors. **Next task = Phase B step 6(b):** make
+`Shape.cpp` link — port the wrapper shapes (Compound/StaticCompound/MutableCompound/Decorated/
+Scaled/RotatedTranslated/OffsetCOM) + ConvexHull + Capsule + a real 4D PlaneShape, and
+cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle (also remove their includes/sRegister
+calls in `RegisterTypes.cpp`). Full detail in the "Phase B … 6." entry below. After that: (c) the
+constraint solver + `PhysicsSystem` loop, (d) link + tests.
+
 Definition of "shipped v1": headless library builds warning-clean; UnitTests all green
 (including new Rotor/Bivec/dynamics conservation tests); a 4D HelloWorld (tesseract falling
 onto a hyperplane floor, stacks of tesseracts stable, spheres bouncing) runs deterministically;
