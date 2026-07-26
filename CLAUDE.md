@@ -301,19 +301,20 @@ PerformanceTest runs on a 4D scene.
      ConvexShape/SphereShape/BoxShape all compile clean with the renderer off.
    - DONE: turned the debug renderer OFF for the build (v1 is headless) — this removes the
      DebugRenderer + per-shape `Draw` errors and makes the count reflect the real surface.
-   - **NEW GEOMETRY BUG FOUND:** `GJKClosestPoint::CastShape` (both overloads) and
-     `EPAPenetrationDepth::CastShape` take a pure-rotation `Mat44Arg inStart` and build
-     `TransformedConvexObject(inStart, Vec4::sZero(), …)`, so the **cast start translation is
-     dropped** (3D Jolt kept it in the Mat44). Fix: change those to `RMat44Arg inStart` and use
-     `inStart.GetRotation()` / `Vec4(inStart.GetTranslation())`. `ConvexShape::sCastConvexVsConvex`
-     is stubbed until this lands.
-   - **Next, in order:** (a) fix the geometry `GJK/EPA CastShape` start (above) and un-stub
-     `sCastConvexVsConvex`; (b) port the wrapper shapes Compound/Decorated/Scaled/
-     RotatedTranslated/OffsetCOM + ConvexHull + Capsule + a real 4D PlaneShape, and cmake-exclude
-     Mesh/HeightField/Cylinder/Tapered*/Triangle so `Shape.cpp` (which includes every shape header)
-     compiles; (c) migrate `ContactConstraintManager` + the ConstraintParts (bivector Jacobians —
-     conceptual gap 2) and `PhysicsSystem` stepping loop; (d) link + a permanent BoxShape/collision
-     unit test.
+   - DONE (a): fixed the geometry shape-cast start-translation bug. `GJKClosestPoint::CastShape`
+     (both overloads) and `EPAPenetrationDepth::CastShape` used to take a pure-rotation `Mat44`
+     start and build `TransformedConvexObject(inStart, Vec4::sZero(), …)`, dropping the cast start
+     position. They now take the start rotation (`Mat44Arg`) and translation (`Vec4Arg`)
+     separately. `ConvexShape::sCastConvexVsConvex` is un-stubbed (real convex-vs-convex cast,
+     Vec4/RMat44). Verified: a unit sphere cast from x=3 toward a sphere at the origin hits at
+     fraction 0.1. `EPATests` updated for the new signature.
+   - **Next, in order:** (b) make `Shape.cpp` link — it includes `ScaledShape.h` +
+     `StaticCompoundShape.h`; port the wrapper shapes Compound(base)/StaticCompound/MutableCompound/
+     Decorated/Scaled/RotatedTranslated/OffsetCOM + ConvexHull + Capsule + a real 4D PlaneShape,
+     and cmake-exclude Mesh/HeightField/Cylinder/Tapered*/Triangle + remove their
+     includes/sRegister calls in `RegisterTypes.cpp` (which includes every shape header). (c)
+     migrate `ContactConstraintManager` + the ConstraintParts (bivector Jacobians — conceptual
+     gap 2) and `PhysicsSystem` stepping loop; (d) link + a permanent BoxShape/collision unit test.
    - Also still TODO: `GetTrianglesStart/Next` and `GetSubmergedVolume` are stubbed on the convex
      shapes (S^3 tetra tessellation; 4D polytope submerged-volume clip).
 7. BroadPhase: QuadTree AABB logic → 4D AABox (mostly mechanical; AABox4 SIMD already done).
